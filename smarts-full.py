@@ -432,9 +432,9 @@ for sheet_name in wb.sheetnames:
         merge_cells_for_column(ws, 1)  # Merge "Enclosure/Slot" column (column 1)
         merge_cells_for_column(ws, 2)  # Merge "Serial Number" column (column 2)
     adjust_column_widths(ws)  # Adjust column widths for all sheets
-host_info_sheet = wb["Host Info"]
-merge_cells_for_column(host_info_sheet, 4)  # Merge "Enclosure/Slot" column (column 1)
-
+if "Host Info" in wb.sheetnames: 
+    host_info_sheet = wb["Host Info"]
+    merge_cells_for_column(host_info_sheet, 4)  # Merge "Enclosure/Slot" column (column 1)
 wb.save(excel_path)
 
 print("SMART data, device info, and host info extracted and written to smart_data.xlsx with proper formatting.")
