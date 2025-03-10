@@ -176,7 +176,7 @@ def extract_device_info(log_content):
             hours_match = re.search(r"number of hours powered up\s+=\s+([\d.]+)", block)
 
             if serial_number and temp_match and hours_match:
-                temperature = f"{temp_match.group(1)} C"
+                temperature = f"{temp_match.group(1)}"
                 hours = hours_match.group(1)
                 data.append({
                     "Device": serial_number,
