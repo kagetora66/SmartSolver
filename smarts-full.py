@@ -82,7 +82,7 @@ def extract_ssd_parameters(log_content):
                             "Parameter": param,
                             "Value": "-",
                             "Raw Value": raw_value
-                        })
+                        })  
             else:
                 # Extract SSD parameters for SATA SSDs
                 smart_matches = smart_pattern.findall(block)
@@ -104,7 +104,7 @@ def extract_ssd_parameters(log_content):
                 "Raw Value": ""
             })
     return data
-# Function to extract HDD parameters with the specified sort order
+
 def extract_hdd_parameters(log_content):
     data = []
     disk_blocks = re.findall(r"=== START OF INFORMATION SECTION ===(.*?)(?==== START OF INFORMATION SECTION ===|\Z)", log_content, re.DOTALL)
