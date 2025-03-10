@@ -298,13 +298,23 @@ def extract_host_info():
 
             # Prepare rows for each host, LUNs, and initiators
             for host_name, data in host_luns_initiators.items():
-                for lun in sorted(data["luns"]):  # Each LUN in a separate row
+                # If there are no LUNs, still include the access point
+                if not data["luns"]:
                     host_data.append({
                         "Access Point": group_name,
                         "Host": host_name,
-                        "LUN": lun,
+                        "LUNs": "",  # Empty string for no LUNs
                         "Initiator Addresses": ", ".join(sorted(data["initiators"]))
                     })
+                else:
+                    # Include each LUN in a separate row
+                    for lun in sorted(data["luns"]):
+                        host_data.append({
+                            "Access Point": group_name,
+                            "Host": host_name,
+                            "LUNs": lun,
+                            "Initiator Addresses": ", ".join(sorted(data["initiators"]))
+                        })
 
         return host_data
 
