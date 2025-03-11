@@ -238,14 +238,14 @@ def extract_host_info():
     db_dir = "./Database"
 
     # Find the most recent SCST configuration file
-    scst_files = sorted(glob.glob(os.path.join(scst_dir, "scst_*.conf")), reverse=True)
+    scst_files = sorted(glob.glob(os.path.join(scst_dir, "scst_2*.conf")), reverse=True)
     if not scst_files:
         print("Error: No 'scst_*.conf' files found in /SCST directory.")
         exit(1)
-
+    
     input_file = scst_files[0]  # Select the most recent file
     output_file = "access_points.csv"
-
+    print(input_file)
     try:
         # Read the input file
         with open(input_file, "r") as file:
