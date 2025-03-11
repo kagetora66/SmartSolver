@@ -17,7 +17,8 @@ ssd_params = [
     "Runtime_Bad_Block",
     "Reported_Uncorrect",
     "Hardware_ECC_Recovered",
-    "Total_LBAs_Written"
+    "Total_LBAs_Written",
+    "Total Size Written (TB)"
 ]
 
 hdd_params = [
@@ -31,6 +32,7 @@ hdd_params = [
 smart_pattern = re.compile(
     r"(\d+)\s+([\w_]+)\s+0x[0-9a-fA-F]+\s+(\d+)\s+\d+\s+\d+\s+\w+-?\w*\s+\w+\s+-\s+(\d+)"
 )
+
 # Function to extract SSD parameters
 def extract_ssd_parameters(log_content):
     data = []
@@ -86,15 +88,32 @@ def extract_ssd_parameters(log_content):
             else:
                 # Extract SSD parameters for SATA SSDs
                 smart_matches = smart_pattern.findall(block)
+                total_lba_written = None  # Initialize variable to store Total_LBA_Written
+
                 for match in smart_matches:
                     attr_id, attr_name, value, raw_value = match
                     if attr_name in ssd_params:
+                        # If the attribute is Total_LBA_Written, store its raw value
+                        if attr_name == "Total_LBAs_Written":
+                            total_lba_written = int(raw_value)
+                        
+                        # Add the parameter to the data list
                         data.append({
                             "Serial Number": serial_number,
                             "Parameter": attr_name,
                             "Value": value,
                             "Raw Value": raw_value
                         })
+
+                # Calculate Total Size Written (TB) if Total_LBA_Written is found
+                if total_lba_written is not None:
+                    total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024  # Formula
+                    data.append({
+                        "Serial Number": serial_number,
+                        "Parameter": "Total Size Written (TB)",
+                        "Value": "-",
+                        "Raw Value": f"{total_size_written_tb:.2f}"  # Format to 2 decimal places
+                    })
             
             # Add an empty row after each disk's data
             data.append({
@@ -105,6 +124,7 @@ def extract_ssd_parameters(log_content):
             })
     return data
 
+# Function to extract HDD parameters
 def extract_hdd_parameters(log_content):
     data = []
     disk_blocks = re.findall(r"=== START OF INFORMATION SECTION ===(.*?)(?==== START OF INFORMATION SECTION ===|\Z)", log_content, re.DOTALL)
@@ -185,6 +205,8 @@ def extract_device_info(log_content):
                 })
 
     return data
+
+# Function to extract enclosure/slot information
 def extract_enclosure_slot_info(log_content, serial_numbers):
     enclosure_slot_data = {}
     
@@ -208,6 +230,7 @@ def extract_enclosure_slot_info(log_content, serial_numbers):
                         break
     
     return enclosure_slot_data
+
 # Function to extract host information from SCST configuration
 def extract_host_info():
     # Directories
@@ -384,14 +407,20 @@ excel_path = 'smart_data.xlsx'
 with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
     # Write SMART data to first sheet
     df_smart = pd.DataFrame(ssd_data + hdd_data)
+
+    # Ensure empty rows are preserved in the DataFrame
+    # Replace empty strings with NaN (optional, but helps with consistency)
+    df_smart.replace("", pd.NA, inplace=True)
+
+    # Write the DataFrame to the Excel file
     df_smart.to_excel(writer, sheet_name="SMART Data", index=False)
 
-    # Write device temperature & powered-up hours to second sheet (only if non-empty)
+    # Write device temperature & powered-up hours to the second sheet (only if non-empty)
     if device_data:
         df_device = pd.DataFrame(device_data)
         df_device.to_excel(writer, sheet_name="Device Info", index=False)
 
-    # Write host information to third sheet (only if non-empty)
+    # Write host information to the third sheet (only if non-empty)
     if host_data:
         df_host = pd.DataFrame(host_data)
         df_host.to_excel(writer, sheet_name="Host Info", index=False)
@@ -436,5 +465,4 @@ if "Host Info" in wb.sheetnames:
     host_info_sheet = wb["Host Info"]
     merge_cells_for_column(host_info_sheet, 4)  # Merge "Enclosure/Slot" column (column 1)
 wb.save(excel_path)
-
 print("SMART data, device info, and host info extracted and written to smart_data.xlsx with proper formatting.")
