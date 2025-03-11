@@ -1,4 +1,3 @@
-#version2.0.2
 import re
 import pandas as pd
 from openpyxl import load_workbook
@@ -28,32 +27,43 @@ hdd_params = [
     "Accumulated start-stop cycles",
     "Accumulated load-unload cycles"
 ]
-
+micron_ssd_params = {
+    "Raw_Read_Error_Rate": "1",
+    "Reallocated_Sector_Ct": "5",
+    "Reported_Uncorrect": "187",
+    "Hardware_ECC_Recovered": "195",
+    "Unused_Rsvd_Blk_Cnt_Tot": "180",
+    "Total_LBAs_Written": "246"  # Unknown attribute at ID# 246
+}
+    
 # Regular expression to extract SMART attributes
 smart_pattern = re.compile(
     r"(\d+)\s+([\w_]+)\s+0x[0-9a-fA-F]+\s+(\d+)\s+\d+\s+\d+\s+\w+-?\w*\s+\w+\s+-\s+(\d+)"
 )
-
 # Function to extract SSD parameters
 def extract_ssd_parameters(log_content):
     data = []
-    disk_blocks = re.findall(r"=== START OF INFORMATION SECTION ===(.*?)(?==== START OF INFORMATION SECTION ===|\Z)", log_content, re.DOTALL)
+    # Split the log into blocks for each disk.
+    disk_blocks = re.findall(
+        r"=== START OF INFORMATION SECTION ===(.*?)(?==== START OF INFORMATION SECTION ===|\Z)",
+        log_content, re.DOTALL
+    )
     
     for block in disk_blocks:
+        # Determine disk type based on certain strings
         is_ssd = not re.search(r"Rotation Rate:\s+\d+ rpm", block, re.IGNORECASE)
         is_sas_ssd = re.search(r"Transport protocol:\s+SAS", block, re.IGNORECASE)
+        is_micron_ssd = re.search(r"Device Model:\s+Micron", block, re.IGNORECASE)
         
         if is_ssd:
             serial_match = re.search(r"Serial Number:\s+(\S+)", block, re.IGNORECASE)
             serial_number = serial_match.group(1) if serial_match else "Unknown"
             
             if is_sas_ssd:
-                # Extract HDD parameters for SAS SSDs
+                # --- SAS SSD extraction (existing logic) ---
                 elements_grown_defect = re.search(r"Elements in grown defect list:\s+(\d+)", block)
                 start_stop_cycles = re.search(r"Accumulated start-stop cycles:\s+(\d+)", block)
                 load_unload_cycles = re.search(r"Accumulated load-unload cycles:\s+(\d+)", block)
-
-                # Extract Total Uncorrected Errors
                 read_error_match = re.search(r"read:.*?(\d+)\s*$", block, re.MULTILINE)
                 write_error_match = re.search(r"write:.*?(\d+)\s*$", block, re.MULTILINE)
                 
@@ -61,7 +71,6 @@ def extract_ssd_parameters(log_content):
                 write_error_value = int(write_error_match.group(1)) if write_error_match else 0
                 total_uncorrected_errors = read_error_value + write_error_value
 
-                # Sort the parameters in the desired order
                 hdd_values = [
                     ("Elements in grown defect list", elements_grown_defect),
                     ("Total Uncorrected Errors", total_uncorrected_errors),
@@ -72,57 +81,98 @@ def extract_ssd_parameters(log_content):
                 for param, match in hdd_values:
                     if isinstance(match, int):  # For Total Uncorrected Errors
                         raw_value = str(match)
-                        data.append({
-                            "Serial Number": serial_number,
-                            "Parameter": param,
-                            "Value": "-",
-                            "Raw Value": raw_value
-                        })
                     elif match:
-                        raw_value = match.group(1) if hasattr(match, "group") else str(match)
-                        data.append({
-                            "Serial Number": serial_number,
-                            "Parameter": param,
-                            "Value": "-",
-                            "Raw Value": raw_value
-                        })  
-            else:
-                # Extract SSD parameters for SATA SSDs
-                smart_matches = smart_pattern.findall(block)
-                total_lba_written = None  # Initialize variable to store Total_LBA_Written
-
-                for match in smart_matches:
-                    attr_id, attr_name, value, raw_value = match
-                    if attr_name in ssd_params:
-                        # If the attribute is Total_LBA_Written, store its raw value
-                        if attr_name == "Total_LBAs_Written":
-                            total_lba_written = int(raw_value)
-                        
-                        # Add the parameter to the data list
-                        data.append({
-                            "Serial Number": serial_number,
-                            "Parameter": attr_name,
-                            "Value": value,
-                            "Raw Value": raw_value
-                        })
-
-                # Calculate Total Size Written (TB) if Total_LBA_Written is found
-                if total_lba_written is not None:
-                    total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024  # Formula
+                        raw_value = match.group(1)
+                    else:
+                        continue
                     data.append({
                         "Serial Number": serial_number,
-                        "Parameter": "Total Size Written (TB)",
+                        "Parameter": param,
                         "Value": "-",
-                        "Raw Value": f"{total_size_written_tb:.2f}"  # Format to 2 decimal places
+                        "Raw Value": raw_value
                     })
+                    
+            else:
+                # --- Non-SAS SSD extraction ---
+                # smart_pattern should be defined elsewhere to extract tuples:
+                # (attr_id, attr_name, value, raw_value)
+                smart_matches = smart_pattern.findall(block)
+                total_lba_written = None  # To store Total_LBAs_Written when found
+                
+                if is_micron_ssd:
+                    # Define the list of expected Micron SMART parameters.
+                    micron_params = [
+                        "Raw_Read_Error_Rate", 
+                        "Reallocated_Sector_Ct", 
+                        "Reported_Uncorrect", 
+                        "Hardware_ECC_Recovered", 
+                        "Unused_Rsvd_Blk_Cnt_Tot"
+                    ]
+                    
+                    for match in smart_matches:
+                        attr_id, attr_name, value, raw_value = match
+                        # Check for the known Micron parameters.
+                        if attr_name in micron_params:
+                            data.append({
+                                "Serial Number": serial_number,
+                                "Parameter": attr_name,
+                                "Value": value,
+                                "Raw Value": raw_value
+                            })
+                        # Detect Total_LBAs_Written by its attribute ID "246"
+                        elif attr_id.strip() == "246":
+                            try:
+                                total_lba_written = int(raw_value)
+                            except ValueError:
+                                total_lba_written = None
+                            data.append({
+                                "Serial Number": serial_number,
+                                "Parameter": "Total_LBAs_Written",
+                                "Value": value,
+                                "Raw Value": raw_value
+                            })
+                            
+                    if total_lba_written is not None:
+                        total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024
+                        data.append({
+                            "Serial Number": serial_number,
+                            "Parameter": "Total Size Written (TB)",
+                            "Value": "-",
+                            "Raw Value": f"{total_size_written_tb:.2f}"
+                        })
+                else:
+                    # Existing logic for non-Micron SATA SSDs
+                    for match in smart_matches:
+                        attr_id, attr_name, value, raw_value = match
+                        if attr_name in ssd_params:  # ssd_params defined elsewhere
+                            if attr_name == "Total_LBAs_Written":
+                                try:
+                                    total_lba_written = int(raw_value)
+                                except ValueError:
+                                    total_lba_written = None
+                            data.append({
+                                "Serial Number": serial_number,
+                                "Parameter": attr_name,
+                                "Value": value,
+                                "Raw Value": raw_value
+                            })
+                    if total_lba_written is not None:
+                        total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024
+                        data.append({
+                            "Serial Number": serial_number,
+                            "Parameter": "Total Size Written (TB)",
+                            "Value": "-",
+                            "Raw Value": f"{total_size_written_tb:.2f}"
+                        })
             
-            # Add an empty row after each disk's data
+            # Add an empty row after each disk's data for readability.
             data.append({
                 "Serial Number": "",
                 "Parameter": "",
                 "Value": "",
                 "Raw Value": ""
             })
+            
     return data
 
 # Function to extract HDD parameters
