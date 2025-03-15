@@ -1,3 +1,8 @@
-SmartSolver
-Put the file in the extracted log folders
-Results are stored in smarts_data.xlsx
+SmartSolver for storcli full log sorting
+
+Put the file in extracted folder
+
+Results are extracted in an excel file. Results include device temperature, smart parameters and access point details
+
+Requiered libraries: openpyxl, pandas
+

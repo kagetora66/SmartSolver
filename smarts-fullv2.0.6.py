@@ -314,6 +314,7 @@ def extract_host_info():
             input_text = file.read()
 
         # Regular expression to match GROUP sections
+        target_pattern = r"TARGET\s+([0-9a-fA-F:]+)"  # Matches TARGET addresses
         group_pattern = r"GROUP\s+([\w-]+)\s*\{([\s\S]*?)\}"  # Matches GROUP name and its content
         lun_pattern = r"LUN\s+(\d+)\s+([\w_]+)"  # Matches LUN numbers and names
         initiator_pattern = r"INITIATOR\s+([0-9a-fA-F:]+)"  # Matches INITIATOR addresses
@@ -451,7 +452,7 @@ for disk in ssd_data + hdd_data:
     if disk["Serial Number"] in enclosure_slot_data:
         disk["Enclosure/Slot"] = enclosure_slot_data[disk["Serial Number"]]
     else:
-        disk["Enclosure/Slot"] = "N/A"
+        disk["Enclosure/Slot"] = ""
 
 # Reorder columns to make "Enclosure/Slot" the first column
 def reorder_columns(data):
@@ -461,8 +462,8 @@ ssd_data = reorder_columns(ssd_data)
 hdd_data = reorder_columns(hdd_data)
 
 # Remove rows where "Enclosure/Slot" is "N/A"
-ssd_data = [disk for disk in ssd_data if disk["Enclosure/Slot"] != "N/A"]
-hdd_data = [disk for disk in hdd_data if disk["Enclosure/Slot"] != "N/A"]
+ssd_data = [disk for disk in ssd_data]
+hdd_data = [disk for disk in hdd_data]
 
 # Create an Excel writer
 excel_path = 'smart_data.xlsx'
