@@ -295,114 +295,107 @@ def extract_enclosure_slot_info(log_content, serial_numbers):
 
 # Function to extract host information from SCST configuration
 def extract_host_info():
-    # Directories
+    import os, glob, re, sqlite3
+
+    print("[DEBUG] Starting extract_host_info()")
+
     scst_dir = "./SCST"
     db_dir = "./Database"
 
-    # Find the most recent SCST configuration file
     scst_files = sorted(glob.glob(os.path.join(scst_dir, "scst_2*.conf")), reverse=True)
     if not scst_files:
         print("Error: No 'scst_*.conf' files found in /SCST directory.")
-        exit(1)
-    
-    input_file = scst_files[0]  # Select the most recent file
-    output_file = "access_points.csv"
-    print(input_file)
+        return []
+
+    input_file = scst_files[0]
+    print(f"[DEBUG] SCST file used: {input_file}")
+
     try:
-        # Read the input file
         with open(input_file, "r") as file:
             input_text = file.read()
 
-        # Regular expression to match GROUP sections
-        target_pattern = r"TARGET\s+([0-9a-fA-F:]+)"  # Matches TARGET addresses
-        group_pattern = r"GROUP\s+([\w-]+)\s*\{([\s\S]*?)\}"  # Matches GROUP name and its content
-        lun_pattern = r"LUN\s+(\d+)\s+([\w_]+)"  # Matches LUN numbers and names
-        initiator_pattern = r"INITIATOR\s+([0-9a-fA-F:]+)"  # Matches INITIATOR addresses
-
-        # Extract all groups
-        groups = re.findall(group_pattern, input_text)
-
-        # Prepare data for Excel
+        target_blocks = re.findall(r"TARGET\s+([0-9a-fA-F:]+)\s*\{([\s\S]*?)\n\}", input_text)
         host_data = []
 
-        # Process each group
-        for group_name, group_content in groups:
-            # Extract LUNs and INITIATORS specific to this group
-            luns = re.findall(lun_pattern, group_content)
-            initiators = re.findall(initiator_pattern, group_content)
+        for target_address, target_body in target_blocks:
+            groups = re.findall(r"GROUP\s+([\w-]+)\s*\{([\s\S]*?)\}", target_body)
 
-            # Remove duplicates for LUNs and Initiators
-            unique_luns = sorted(set(luns), key=lambda x: int(x[0]))  # Sort by LUN number
-            unique_initiators = sorted(set(initiators))
+            for group_name, group_content in groups:
+                luns = re.findall(r"LUN\s+(\d+)\s+([\w_]+)", group_content)
+                initiators = re.findall(r"INITIATOR\s+([0-9a-fA-F:]+)", group_content)
 
-            # Database processing starts here
-            sab_db_file = os.path.join(db_dir, "sab.db")  # SQLite database file
+                unique_luns = sorted(set(luns), key=lambda x: int(x[0]))
+                unique_initiators = sorted(set(initiators))
 
-            # Connect to the SQLite database
-            conn = sqlite3.connect(sab_db_file)
-            cursor = conn.cursor()
+                sab_db_file = os.path.join(db_dir, "sab.db")
+                host_map = {}
 
-            # Query to find the `to_host_id` for each initiator in the "hostinitiators" table
-            hostinitiators_query = """
-            SELECT initiator_name, to_host_id 
-            FROM hostinitiators
-            WHERE initiator_name = ?
-            """
+                with sqlite3.connect(sab_db_file) as conn:
+                    cursor = conn.cursor()
 
-            # Query to find the `name` in the "host" table using `to_host_id`
-            host_query = """
-            SELECT NAME 
-            FROM host
-            WHERE ID = ?
-            """
+                    for initiator in unique_initiators:
+                        cursor.execute("""
+                            SELECT initiator_name, to_host_id 
+                            FROM hostinitiators
+                            WHERE initiator_name = ?
+                        """, (initiator,))
+                        to_host_row = cursor.fetchone()
 
-            # Map initiators to their host names
-            host_map = {}
-            for initiator in unique_initiators:
-                cursor.execute(hostinitiators_query, (initiator,))
-                to_host_row = cursor.fetchone()
+                        if to_host_row:
+                            to_host_id = to_host_row[1]
+                            cursor.execute("""
+                                SELECT NAME 
+                                FROM host
+                                WHERE ID = ?
+                            """, (to_host_id,))
+                            host_row = cursor.fetchone()
 
-                if to_host_row:
-                    to_host_id = to_host_row[1]
-                    cursor.execute(host_query, (to_host_id,))
-                    host_row = cursor.fetchone()
+                            host_map[initiator] = host_row[0] if host_row else "Not Found"
+                        else:
+                            host_map[initiator] = "Not Found"
 
-                    if host_row:
-                        host_map[initiator] = host_row[0]
-                    else:
-                        host_map[initiator] = "Not Found"
-                else:
-                    host_map[initiator] = "Not Found"
+                # Group initiators and LUNs by host
+                host_luns_initiators = {}
+                for initiator, host_name in host_map.items():
+                    if host_name not in host_luns_initiators:
+                        host_luns_initiators[host_name] = {
+                            "luns": set(),
+                            "initiators": [],
+                            "target_map": {}
+                        }
+                    host_luns_initiators[host_name]["luns"].update(
+                        [lun[1] for lun in unique_luns if lun[1] != "device_null"]
+                    )
+                    host_luns_initiators[host_name]["initiators"].append(initiator)
+                    host_luns_initiators[host_name]["target_map"][initiator] = target_address
 
-            # Group LUNs and Initiators by host
-            host_luns_initiators = {}
-            for initiator, host_name in host_map.items():
-                if host_name not in host_luns_initiators:
-                    host_luns_initiators[host_name] = {"luns": set(), "initiators": set()}
-                host_luns_initiators[host_name]["luns"].update([lun[1] for lun in unique_luns if lun[1] != "device_null"])  # Exclude device_null
-                host_luns_initiators[host_name]["initiators"].add(initiator)
+                for host_name, data in host_luns_initiators.items():
+                    for initiator in sorted(data["initiators"]):
+                        target = data["target_map"].get(initiator, "")
+                        if not data["luns"]:
+                            host_data.append({
+                                "Access Point": group_name,
+                                "Host": host_name,
+                                "LUNs": "",
+                                "Initiator Addresses": initiator,
+                                "Target Address": target
+                            })
+                        else:
+                            for lun in sorted(data["luns"]):
+                                host_data.append({
+                                    "Access Point": group_name,
+                                    "Host": host_name,
+                                    "LUNs": lun,
+                                    "Initiator Addresses": initiator,
+                                    "Target Address": target
+                                })
 
-            # Prepare rows for each host, LUNs, and initiators
-            for host_name, data in host_luns_initiators.items():
-                # If there are no LUNs, still include the access point
-                if not data["luns"]:
-                    host_data.append({
-                        "Access Point": group_name,
-                        "Host": host_name,
-                        "LUNs": "",  # Empty string for no LUNs
-                        "Initiator Addresses": ", ".join(sorted(data["initiators"]))
-                    })
-                else:
-                    # Include each LUN in a separate row
-                    for lun in sorted(data["luns"]):
-                        host_data.append({
-                            "Access Point": group_name,
-                            "Host": host_name,
-                            "LUNs": lun,
-                            "Initiator Addresses": ", ".join(sorted(data["initiators"]))
-                        })
-
+        print(f"[DEBUG] Returning {len(host_data)} host entries")
         return host_data
+
+    except Exception as e:
+        print(f"[ERROR] extract_host_info failed: {e}")
+        return []
 
     except ValueError as e:
         print(f"Error: {e}")
@@ -526,6 +519,7 @@ for sheet_name in wb.sheetnames:
     adjust_column_widths(ws)  # Adjust column widths for all sheets
 if "Host Info" in wb.sheetnames: 
     host_info_sheet = wb["Host Info"]
-    merge_cells_for_column(host_info_sheet, 4)  # Merge "Enclosure/Slot" column (column 1)
+    merge_cells_for_column(host_info_sheet, 4)  # Merge "Initiators" column (column 4)
+    merge_cells_for_column(host_info_sheet, 5)  # Merge "Targets" column (column 5) 
 wb.save(excel_path)
 print("SMART data, device info, and host info extracted and written to smart_data.xlsx with proper formatting.")
