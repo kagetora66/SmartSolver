@@ -312,9 +312,34 @@ def extract_host_info():
 
     try:
         with open(input_file, "r") as file:
-            input_text = file.read()
+            lines = file.readlines()
 
-        target_blocks = re.findall(r"TARGET\s+([0-9a-fA-F:]+)\s*\{([\s\S]*?)\n\}", input_text)
+        target_blocks = []
+        current_target = None
+        brace_count = 0
+
+        # Manually parse TARGET blocks
+        for line in lines:
+            target_match = re.match(r"\s*TARGET\s+([0-9a-fA-F:]+)\s*\{", line)
+            if target_match:
+                if current_target:
+                    print("[WARNING] Nested TARGET found, skipping previous unfinished block.")
+                current_target = {
+                    "address": target_match.group(1),
+                    "content": [line]
+                }
+                brace_count = 1
+                continue
+
+            if current_target:
+                current_target["content"].append(line)
+                brace_count += line.count("{")
+                brace_count -= line.count("}")
+                if brace_count == 0:
+                    # Complete block
+                    target_blocks.append((current_target["address"], "".join(current_target["content"])))
+                    current_target = None
+
         host_data = []
 
         for target_address, target_body in target_blocks:
@@ -349,7 +374,6 @@ def extract_host_info():
                                 WHERE ID = ?
                             """, (to_host_id,))
                             host_row = cursor.fetchone()
-
                             host_map[initiator] = host_row[0] if host_row else "Not Found"
                         else:
                             host_map[initiator] = "Not Found"
@@ -390,7 +414,8 @@ def extract_host_info():
                                     "Target Address": target
                                 })
 
-        print(f"[DEBUG] Returning {len(host_data)} host entries")
+        print(f"[DEBUG] Parsed {len(target_blocks)} target blocks.")
+        print(f"[DEBUG] Returning {len(host_data)} host entries.")
         return host_data
 
     except Exception as e:
