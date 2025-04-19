@@ -298,15 +298,18 @@ def extract_sysinfo():
     sys_info = {}
     
     try:
-        # Extract uptime from SystemInfo.mylinux
+        # Extract uptime and serial number from SystemInfo.mylinux
         with open(sysinfo_file, "r") as file:
             for line in file:
                 uptime_match = re.search(r"up\s+(\d+)\s+days?", line)
+                serial_match = re.search(r"Serial Number:\s*(\S+)", line)
                 if uptime_match:
                     sys_info["Uptime (days)"] = int(uptime_match.group(1))
                     break
                 else:
                     sys_info["Uptime (days)"] = 0
+                if serial_match:
+                     sys_info["Serial Number"] = serial_match.group(1)
 
         # Extract versions from version file
         with open(version_file, "r") as file:
