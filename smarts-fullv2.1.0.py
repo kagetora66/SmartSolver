@@ -292,11 +292,46 @@ def extract_enclosure_slot_info(log_content, serial_numbers):
                         break
     
     return enclosure_slot_data
+def extract_sysinfo():
+    sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
+    version_file = os.path.join(script_dir, "version")
+    sys_info = {}
+    
+    try:
+        # Extract uptime from SystemInfo.mylinux
+        with open(sysinfo_file, "r") as file:
+            for line in file:
+                uptime_match = re.search(r"up\s+(\d+)\s+days?", line)
+                if uptime_match:
+                    sys_info["Uptime (days)"] = int(uptime_match.group(1))
+                    break
+                else:
+                    sys_info["Uptime (days)"] = 0
+
+        # Extract versions from version file
+        with open(version_file, "r") as file:
+            content = file.read()
+            versions = {
+                "UI Version": re.search(r'UI Version:\s*([\d.]+)', content),
+                "CLI Version": re.search(r'CLI Version:\s*([\d.]+)', content),
+                "SAB Version": re.search(r'SAB Version:\s*([\d.]+)', content)
+            }
+            
+            for name, match in versions.items():
+                if match:
+                    sys_info[name] = match.group(1)
+                else:
+                    sys_info[name] = "Not Found"
+                    
+        # Convert to list of dict format that pandas expects
+        return [sys_info]
+    except Exception as e:
+        print(f"Error extracting system info: {e}")
+        return []
 
 # Function to extract host information from SCST configuration
 def extract_host_info():
     import os, glob, re, sqlite3
-
     print("[DEBUG] Starting extract_host_info()")
 
     scst_dir = "./SCST"
@@ -460,7 +495,8 @@ device_data = extract_device_info(smarts_content)
 
 # Extract host information
 host_data = extract_host_info()
-
+# Extract General Device Info
+sys_info = extract_sysinfo()
 # Extract enclosure/slot information
 serial_numbers = set([disk["Serial Number"] for disk in ssd_data + hdd_data if disk["Serial Number"] != "Unknown"])
 enclosure_slot_data = extract_enclosure_slot_info(storcli_content, serial_numbers)
@@ -505,6 +541,9 @@ with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
     if host_data:
         df_host = pd.DataFrame(host_data)
         df_host.to_excel(writer, sheet_name="Host Info", index=False)
+    if sys_info:
+        df_host = pd.DataFrame(sys_info)
+        df_host.to_excel(writer, sheet_name="General System Info", index=False)
 
 # Open the Excel file and format it
 wb = load_workbook(excel_path)
