@@ -296,13 +296,16 @@ def extract_sysinfo():
     sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
     version_file = os.path.join(script_dir, "version")
     sys_info = {}
-    
+    voltage_index = 1 #For separting the two power modules
+    current_index = 1 #For separating the two power modules
     try:
         # Extract uptime and serial number from SystemInfo.mylinux
         with open(sysinfo_file, "r") as file:
             for line in file:
                 uptime_match = re.search(r"up\s+(\d+)\s+days?", line)
-                serial_match = re.search(r"Serial Number:\s*(\S+)", line)
+                serial_match = re.search(r"Serial Number:\s*ZM(\S+)", line)
+                voltage_match = re.search(r"Input Voltage\s*\|\s*([\d.]+)\s*V", line)
+                current_match = re.search(r"Input Current \s*\|\s*([\d.]+)\s*A", line) 
                 if uptime_match:
                     sys_info["Uptime (days)"] = int(uptime_match.group(1))
                     break
@@ -310,7 +313,12 @@ def extract_sysinfo():
                     sys_info["Uptime (days)"] = 0
                 if serial_match:
                      sys_info["Serial Number"] = serial_match.group(1)
-
+                if voltage_match:
+                    sys_info[f"Voltage{voltage_index}"] = float(voltage_match.group(1))
+                    voltage_index += 1
+                if current_match:
+                    sys_info[f"Current{current_index}"] = float(current_match.group(1))
+                    current_index += 1
         # Extract versions from version file
         with open(version_file, "r") as file:
             content = file.read()
