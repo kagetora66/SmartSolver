@@ -271,26 +271,49 @@ def extract_device_info(log_content):
 # Function to extract enclosure/slot information
 def extract_enclosure_slot_info(log_content, serial_numbers):
     enclosure_slot_data = {}
-    
+
     # Split the log content into lines
     lines = log_content.splitlines()
-    
-    # Iterate through the lines to find serial numbers and their corresponding Drive lines
+
+    current_shield_counter = None
+    current_media_error_count = None
+    current_other_error_count = None
+
     for i, line in enumerate(lines):
-        # Check if the line contains a serial number
-        if line.strip().startswith("SN ="):
+        line = line.strip()
+
+        # Capture Shield Counter
+        if line.startswith("Shield Counter"):
+            current_shield_counter = line.split("=")[1].strip()
+
+        # Capture Media Error Count
+        elif line.startswith("Media Error Count"):
+            current_media_error_count = line.split("=")[1].strip()
+
+        # Capture Other Error Count
+        elif line.startswith("Other Error Count"):
+            current_other_error_count = line.split("=")[1].strip()
+
+        # Detect Serial Number
+        elif line.startswith("SN ="):
             serial = line.split("=")[1].strip()
             if serial in serial_numbers:
-                # Search backward for the Drive line
-                for j in range(i, max(i - 20, -1), -1):  # Look back up to 20 lines
-                    if lines[j].strip().startswith("Drive /c"):
-                        # Extract enclosure and slot from the Drive line
-                        drive_line = lines[j].strip()
+                # Search backward for Drive line
+                for j in range(i, max(i - 20, -1), -1):
+                    drive_line = lines[j].strip()
+                    if drive_line.startswith("Drive /c"):
                         enclosure = drive_line.split("/e")[1].split("/")[0]
                         slot = drive_line.split("/s")[1].split()[0]
-                        enclosure_slot_data[serial] = f"{enclosure}/{slot}"
+
+                        # Now assign all gathered info
+                        enclosure_slot_data[serial] = {
+                            "enclosure_slot": f"{enclosure}/{slot}",
+                            "shield_counter": current_shield_counter,
+                            "media_error_count": current_media_error_count,
+                            "other_error_count": current_other_error_count
+                        }
                         break
-    
+
     return enclosure_slot_data
 def extract_sysinfo():
     sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
@@ -515,7 +538,10 @@ enclosure_slot_data = extract_enclosure_slot_info(storcli_content, serial_number
 # Add enclosure/slot information to SSD and HDD data
 for disk in ssd_data + hdd_data:
     if disk["Serial Number"] in enclosure_slot_data:
-        disk["Enclosure/Slot"] = enclosure_slot_data[disk["Serial Number"]]
+        disk["Enclosure/Slot"] = enclosure_slot_data[disk["Serial Number"]]["enclosure_slot"]
+        disk["Shield Counter"] = enclosure_slot_data[disk["Serial Number"]]["shield_counter"]
+        disk["Media Error Count"] = enclosure_slot_data[disk["Serial Number"]]["media_error_count"]
+        disk["Other Error Count"] = enclosure_slot_data[disk["Serial Number"]]["other_error_count"]
     else:
         disk["Enclosure/Slot"] = ""
 
