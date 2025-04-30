@@ -7,7 +7,8 @@ import csv
 import os
 import glob
 import sqlite3
-
+import getpass
+from zipfile import ZipFile
 # Define required parameters
 ssd_params = [
     "Reallocated_Sector_Ct",
@@ -502,7 +503,51 @@ def extract_host_info():
     finally:
         if 'conn' in locals():
             conn.close()
+def extractor():
+    script_dir = os.getcwd()
+    passwd = getpass.getpass("Enter ZIP password: ")
 
+    # Find full_log.zip or full_log.log
+    log_file = None
+    for file in os.scandir(script_dir):
+        if 'full_log' in file.name.lower():
+            log_file = file.name
+            break
+
+    if not log_file:
+        print("No log file found.")
+        return
+
+    # Rename if needed
+    if log_file.lower().endswith('.log'):
+        zip_name = log_file[:-4] + '.zip'
+        os.rename(log_file, zip_name)
+        log_file = zip_name
+
+    # First unzip (password-protected)
+    with ZipFile(log_file, 'r') as zip_ref:
+        zip_ref.extractall(script_dir, pwd=bytes(passwd, 'utf-8'))
+
+    # Find inner zip
+    inner_zip = None
+    for file in os.scandir(script_dir):
+        if file.name.endswith('.zip') and 'full_log' not in file.name.lower():
+            inner_zip = file.name
+            break
+
+    if inner_zip:
+        with ZipFile(inner_zip, 'r') as zip_ref:
+            # Safe extract to avoid absolute paths or path traversal
+            for member in zip_ref.namelist():
+                member_path = os.path.normpath(member)
+                if not member_path.startswith("..") and not os.path.isabs(member_path):
+                    target_path = os.path.join(script_dir, member_path)
+                    zip_ref.extract(member, script_dir)
+            print("Extraction complete.")
+    else:
+        print("No inner zip file found.")
+#Extract files
+extractor()
 # Get the directory of the script
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
