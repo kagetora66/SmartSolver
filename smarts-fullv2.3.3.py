@@ -306,7 +306,7 @@ def extract_enclosure_slot_info(log_content, serial_numbers):
     current_shield_counter = None
     current_media_error_count = None
     current_other_error_count = None
-
+    disk_status = None
     for i, line in enumerate(lines):
         line = line.strip()
 
@@ -321,6 +321,17 @@ def extract_enclosure_slot_info(log_content, serial_numbers):
         # Capture Other Error Count
         elif line.startswith("Other Error Count"):
             current_other_error_count = line.split("=")[1].strip()
+        #Capture disk state 
+        
+        if " UGood " in line:
+            disk_status = "No Config"
+        elif " Onln " in line:
+            disk_status = "Operational"
+        elif " DHS " in line:
+            disk_status = "Hotspare"
+        elif " UBad " in line:
+            disk_status = "BAD UNCONFIGURED"
+
 
         # Detect Serial Number
         elif line.startswith("SN ="):
@@ -338,7 +349,8 @@ def extract_enclosure_slot_info(log_content, serial_numbers):
                             "enclosure_slot": f"{enclosure}/{slot}",
                             "shield_counter": current_shield_counter,
                             "media_error_count": current_media_error_count,
-                            "other_error_count": current_other_error_count
+                            "other_error_count": current_other_error_count,
+                            "Disk State": disk_status
                         }
                         break
 
@@ -614,6 +626,7 @@ for disk in ssd_data + hdd_data:
         disk["Shield Counter"] = enclosure_slot_data[disk["Serial Number"]]["shield_counter"]
         disk["Media Error Count"] = enclosure_slot_data[disk["Serial Number"]]["media_error_count"]
         disk["Other Error Count"] = enclosure_slot_data[disk["Serial Number"]]["other_error_count"]
+        disk["Disk State"] = enclosure_slot_data[disk["Serial Number"]]["Disk State"]
     else:
         disk["Enclosure/Slot"] = ""
 
@@ -690,6 +703,8 @@ for sheet_name in wb.sheetnames:
         merge_cells_for_column(ws, 1)  # Merge "Enclosure/Slot" column (column 1)
         merge_cells_for_column(ws, 2)  # Merge "Serial Number" column (column 2)
         merge_cells_for_column(ws, 3)  # Merge "Device Model" column (column 3)
+        merge_cells_for_column(ws, 10)  # Merge "Disk State" column (column 10)
+    adjust_column_widths(ws)  # Adjust column widths for all sheets
     adjust_column_widths(ws)  # Adjust column widths for all sheets
 if "Host Info" in wb.sheetnames: 
     host_info_sheet = wb["Host Info"]
