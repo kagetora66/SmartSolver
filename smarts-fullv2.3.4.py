@@ -405,18 +405,22 @@ def extract_sysinfo():
 
 # Function to extract host information from SCST configuration
 def extract_host_info():
-    import os, glob, re, sqlite3
-    print("[DEBUG] Starting extract_host_info()")
-
+    
     scst_dir = "./SCST"
     db_dir = "./Database"
-
-    scst_files = sorted(glob.glob(os.path.join(scst_dir, "scst_2*.conf")), reverse=True)
+    #Checks for new scst file inside script directory
+    is_new_scst = os.path.isfile(os.path.join(os.path.dirname(__file__), 'scst.conf'))
+    if is_new_scst:
+        scst_files = "scst.conf"
+        input_file = scst_files
+    else:
+        scst_files = sorted(glob.glob(os.path.join(scst_dir, "scst_2*.conf")), reverse=True)
+        input_file = scst_files[0]
     if not scst_files:
         print("Error: No 'scst_*.conf' files found in /SCST directory.")
         return []
 
-    input_file = scst_files[0]
+    #input_file = scst_files[0]
     print(f"[DEBUG] SCST file used: {input_file}")
 
     try:
