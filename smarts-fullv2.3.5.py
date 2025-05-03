@@ -313,14 +313,21 @@ def extract_enclosure_slot_info(log_content, serial_numbers):
         # Capture Shield Counter
         if line.startswith("Shield Counter"):
             current_shield_counter = line.split("=")[1].strip()
+            if current_shield_counter == "0":
+                current_shield_counter = "-"
 
         # Capture Media Error Count
         elif line.startswith("Media Error Count"):
             current_media_error_count = line.split("=")[1].strip()
+            if current_media_error_count == "0":
+                current_media_error_count = "-"
+
 
         # Capture Other Error Count
         elif line.startswith("Other Error Count"):
             current_other_error_count = line.split("=")[1].strip()
+            if current_other_error_count == "0":
+                current_other_error_count = "-"
         #Capture disk state 
         
         if " UGood " in line:
