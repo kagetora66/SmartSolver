@@ -310,6 +310,7 @@ def extract_enclosure_slot_info(log_content, serial_numbers):
     current_shield_counter = None
     current_media_error_count = None
     current_other_error_count = None
+    predictive_failure_count = None
     disk_status = None
     for i, line in enumerate(lines):
         line = line.strip()
@@ -332,6 +333,13 @@ def extract_enclosure_slot_info(log_content, serial_numbers):
             current_other_error_count = line.split("=")[1].strip()
             if current_other_error_count == "0":
                 current_other_error_count = "-"
+
+        #Capture Predictive Failure Count
+        elif line.startswith("Predictive Failure Count"):
+            predictive_failure_count = line.split("=")[1].strip()
+            if predictive_failure_count == "0":
+               predictive_failure_count = "-"
+
         #Capture disk state 
         
         if " UGood " in line:
@@ -361,6 +369,7 @@ def extract_enclosure_slot_info(log_content, serial_numbers):
                             "shield_counter": current_shield_counter,
                             "media_error_count": current_media_error_count,
                             "other_error_count": current_other_error_count,
+                            "predictive_failure_count": predictive_failure_count,
                             "Disk State": disk_status
                         }
                         break
@@ -639,8 +648,9 @@ for disk in ssd_data + hdd_data:
     if disk["Serial Number"] in enclosure_slot_data:
         disk["Enclosure/Slot"] = enclosure_slot_data[disk["Serial Number"]]["enclosure_slot"]
         disk["Shield Counter"] = enclosure_slot_data[disk["Serial Number"]]["shield_counter"]
-        disk["Media Error Count"] = enclosure_slot_data[disk["Serial Number"]]["media_error_count"]
-        disk["Other Error Count"] = enclosure_slot_data[disk["Serial Number"]]["other_error_count"]
+        disk["Media Error"] = enclosure_slot_data[disk["Serial Number"]]["media_error_count"]
+        disk["Other Error"] = enclosure_slot_data[disk["Serial Number"]]["other_error_count"]
+        disk["Predictive Failure"] = enclosure_slot_data[disk["Serial Number"]]["predictive_failure_count"]
         disk["Disk State"] = enclosure_slot_data[disk["Serial Number"]]["Disk State"]
     else:
         disk["Enclosure/Slot"] = ""
@@ -718,7 +728,7 @@ for sheet_name in wb.sheetnames:
         merge_cells_for_column(ws, 1)  # Merge "Enclosure/Slot" column (column 1)
         merge_cells_for_column(ws, 2)  # Merge "Serial Number" column (column 2)
         merge_cells_for_column(ws, 3)  # Merge "Device Model" column (column 3)
-        merge_cells_for_column(ws, 10)  # Merge "Disk State" column (column 10)
+        merge_cells_for_column(ws, 11)  # Merge "Disk State" column (column 10)
     adjust_column_widths(ws)  # Adjust column widths for all sheets
     adjust_column_widths(ws)  # Adjust column widths for all sheets
 if "Host Info" in wb.sheetnames: 
