@@ -270,7 +270,8 @@ def extract_device_info(log_content):
 
          temp_match = re.search(r"Current Drive Temperature:\s+(\d+)", block)
          hours_match = re.search(r"number of hours powered up\s+=\s+([\d.]+)", block)
-
+         #For Samsung SSDs
+         temp_match_sam = re.search(r"194\s+[\w_]+\s+[\w\d]+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+-\s+(\d+)", block)
          if serial_number and temp_match:
              temperature = f"{temp_match.group(1)}"
              if hours_match:                
@@ -285,6 +286,13 @@ def extract_device_info(log_content):
                      "Device": serial_number,
                      "Temperature": temperature,
                  })
+         elif serial_number and temp_match_sam:
+             temperature = f"{temp_match_sam.group(1)}"
+             data.append({
+                 "Device": serial_number,
+                 "Temperature": temperature,
+                 })
+
     data.extend(tmp_data)
     return data
 
