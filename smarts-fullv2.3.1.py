@@ -59,7 +59,8 @@ def extract_ssd_parameters(log_content):
         if is_ssd:
             serial_match = re.search(r"Serial Number:\s+(\S+)", block, re.IGNORECASE)
             serial_number = serial_match.group(1) if serial_match else "Unknown"
-            
+            model_match =  re.search(r"Device Model:\s+(\S+)", block, re.IGNORECASE)
+            device_model = serial_match.group(1) if model_match else "Unknown" 
             if is_sas_ssd:
                 # --- SAS SSD extraction (existing logic) ---
                 elements_grown_defect = re.search(r"Elements in grown defect list:\s+(\d+)", block)
@@ -88,6 +89,7 @@ def extract_ssd_parameters(log_content):
                         continue
                     data.append({
                         "Serial Number": serial_number,
+                        "Device Model": device_model, 
                         "Parameter": param,
                         "Value": "-",
                         "Raw Value": raw_value
@@ -116,6 +118,7 @@ def extract_ssd_parameters(log_content):
                         if attr_name in micron_params:
                             data.append({
                                 "Serial Number": serial_number,
+                                "Device Model": device_model,
                                 "Parameter": attr_name,
                                 "Value": value,
                                 "Raw Value": raw_value
@@ -128,6 +131,7 @@ def extract_ssd_parameters(log_content):
                                 total_lba_written = None
                             data.append({
                                 "Serial Number": serial_number,
+                                "Device Model": device_model,
                                 "Parameter": "Total_LBAs_Written",
                                 "Value": value,
                                 "Raw Value": raw_value
@@ -137,6 +141,7 @@ def extract_ssd_parameters(log_content):
                         total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024
                         data.append({
                             "Serial Number": serial_number,
+                            "Device Model": device_model,
                             "Parameter": "Total Size Written (TB)",
                             "Value": "-",
                             "Raw Value": f"{total_size_written_tb:.2f}"
@@ -153,6 +158,7 @@ def extract_ssd_parameters(log_content):
                                     total_lba_written = None
                             data.append({
                                 "Serial Number": serial_number,
+                                "Device Model": device_model,
                                 "Parameter": attr_name,
                                 "Value": value,
                                 "Raw Value": raw_value
@@ -161,6 +167,7 @@ def extract_ssd_parameters(log_content):
                         total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024
                         data.append({
                             "Serial Number": serial_number,
+                            "Device Model": device_model,
                             "Parameter": "Total Size Written (TB)",
                             "Value": "-",
                             "Raw Value": f"{total_size_written_tb:.2f}"
@@ -169,6 +176,7 @@ def extract_ssd_parameters(log_content):
             # Add an empty row after each disk's data for readability.
             data.append({
                 "Serial Number": "",
+                "Device Model": "",
                 "Parameter": "",
                 "Value": "",
                 "Raw Value": ""
@@ -193,7 +201,15 @@ def extract_hdd_parameters(log_content):
         if is_hdd:
             serial_match = re.search(r"Serial Number:\s+(\S+)", block, re.IGNORECASE)
             serial_number = serial_match.group(1) if serial_match else "Unknown"
-            
+
+            model_match =  re.search(r"Device Model:\s+(\S+)", block, re.IGNORECASE)
+            model_match_hp = re.search(r"Product:\s+(\S+)", block, re.IGNORECASE)
+            device_model = (
+                    model_match.group(1) if model_match 
+                    else model_match_hp.group(1) if model_match_hp
+                    else "Unknown"
+                    )
+  
             elements_grown_defect = re.search(r"Elements in grown defect list:\s+(\d+)", block)
             start_stop_cycles = re.search(r"Accumulated start-stop cycles:\s+(\d+)", block)
             load_unload_cycles = re.search(r"Accumulated load-unload cycles:\s+(\d+)", block)
@@ -219,6 +235,7 @@ def extract_hdd_parameters(log_content):
                     raw_value = str(match)
                     data.append({
                         "Serial Number": serial_number,
+                        "Device Model": device_model,
                         "Parameter": param,
                         "Value": "-",
                         "Raw Value": raw_value
@@ -227,6 +244,7 @@ def extract_hdd_parameters(log_content):
                     raw_value = match.group(1) if hasattr(match, "group") else str(match)
                     data.append({
                         "Serial Number": serial_number,
+                        "Device Model": device_model,
                         "Parameter": param,
                         "Value": "-",
                         "Raw Value": raw_value
@@ -234,6 +252,7 @@ def extract_hdd_parameters(log_content):
             # Add an empty row after each disk's data
             data.append({
                 "Serial Number": "",
+                "Device Model": "",
                 "Parameter": "",
                 "Value": "",
                 "Raw Value": ""
@@ -662,6 +681,7 @@ for sheet_name in wb.sheetnames:
     if sheet_name != "Device Info":  # Skip merging for "Device Info" sheet
         merge_cells_for_column(ws, 1)  # Merge "Enclosure/Slot" column (column 1)
         merge_cells_for_column(ws, 2)  # Merge "Serial Number" column (column 2)
+        merge_cells_for_column(ws, 3)  # Merge "Device Model" column (column 3)
     adjust_column_widths(ws)  # Adjust column widths for all sheets
 if "Host Info" in wb.sheetnames: 
     host_info_sheet = wb["Host Info"]
