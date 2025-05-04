@@ -463,7 +463,8 @@ def extract_host_info():
                     port_type = "SAN Switch"
                 target_port_type[current_wwn] = port_type
                 current_wwn = None
-    print(target_port_type)
+    else:
+        target_port_type = {}
     try:
         with open(input_file, "r") as file:
             lines = file.readlines()
@@ -550,9 +551,10 @@ def extract_host_info():
                 for host_name, data in host_luns_initiators.items():
                     for initiator in sorted(data["initiators"]):
                         target = data["target_map"].get(initiator, "")
-                        print(target)
-                        port_type = target_port_type.get(target, "")
-                        print(f"port type is {port_type}")
+                        if target_port_type:
+                            port_type = target_port_type.get(target, "")
+                        else:
+                            port_type = "-"
                         if not data["luns"]:
                             host_data.append({
                                 "Access Point": group_name,
@@ -572,7 +574,7 @@ def extract_host_info():
                                     "Target Address": target,
                                     "Connection Type": port_type
                                 })
-        if not host_data:
+        if not host_data and target_port_type:
             for target, port_type in target_port_type.items():
                 host_data.append({
                     "Access Point": "",
@@ -646,11 +648,10 @@ def extractor():
             print("Extraction complete.")
     else:
         print("No inner zip file found.")
-#Extract files
-extractor()
-# Get the directory of the script
 script_dir = os.path.dirname(os.path.abspath(__file__))
-
+#Extract files
+if not os.path.isfile(os.path.join(script_dir, 'version')):
+    extractor()
 # Path to the smarts.mylinux file in the /SystemOverallInfo directory
 smarts_file_path = os.path.join(script_dir, "SystemOverallInfo", "smarts.mylinux")
 
