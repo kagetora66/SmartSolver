@@ -439,10 +439,31 @@ def extract_host_info():
     if not scst_files:
         print("Error: No 'scst_*.conf' files found in /SCST directory.")
         return []
-
-    #input_file = scst_files[0]
+    #Checks for output.txt file inside script directory 
+    is_pmc = os.path.isfile(os.path.join(os.path.dirname(__file__), 'output.txt'))
     print(f"[DEBUG] SCST file used: {input_file}")
-
+    if is_pmc:
+        print("PMC output found")
+        pmc_output = "output.txt"
+        target_port_type = {}
+        current_wwn = None
+        with open(pmc_output, "r") as file:
+            lines = file.readlines()
+        #We map port connection to wwn addresses 
+        for line in lines:
+            line = line.strip()
+            if line.startswith('0x'):
+                current_wwn = line
+                current_wwn = current_wwn.lower().replace('0x', '')
+                current_wwn = ':'.join(current_wwn[i:i+2] for i in range(0, len(current_wwn), 2))
+            elif line.startswith('Point') or line.startswith("NPort") and current_wwn:
+                if line.startswith('Point'):
+                    port_type = "Point to Point"
+                else:
+                    port_type = "SAN Switch"
+                target_port_type[current_wwn] = port_type
+                current_wwn = None
+    print(target_port_type)
     try:
         with open(input_file, "r") as file:
             lines = file.readlines()
@@ -529,13 +550,17 @@ def extract_host_info():
                 for host_name, data in host_luns_initiators.items():
                     for initiator in sorted(data["initiators"]):
                         target = data["target_map"].get(initiator, "")
+                        print(target)
+                        port_type = target_port_type.get(target, "")
+                        print(f"port type is {port_type}")
                         if not data["luns"]:
                             host_data.append({
                                 "Access Point": group_name,
                                 "Host": host_name,
                                 "LUNs": "",
                                 "Initiator Addresses": initiator,
-                                "Target Address": target
+                                "Target Address": target,
+                                "Connection Type" : port_type
                             })
                         else:
                             for lun in sorted(data["luns"]):
@@ -544,11 +569,23 @@ def extract_host_info():
                                     "Host": host_name,
                                     "LUNs": lun,
                                     "Initiator Addresses": initiator,
-                                    "Target Address": target
+                                    "Target Address": target,
+                                    "Connection Type": port_type
                                 })
+        if not host_data:
+            for target, port_type in target_port_type.items():
+                host_data.append({
+                    "Access Point": "",
+                    "Host": "",
+                    "LUNs": "",
+                    "Initiator Addresses": "",
+                    "Target Addresses": target,
+                    "Connection Type": port_type
+                    })
 
-        print(f"[DEBUG] Parsed {len(target_blocks)} target blocks.")
-        print(f"[DEBUG] Returning {len(host_data)} host entries.")
+
+#        print(f"[DEBUG] Parsed {len(target_blocks)} target blocks.")
+#        print(f"[DEBUG] Returning {len(host_data)} host entries.")
         return host_data
 
     except Exception as e:
