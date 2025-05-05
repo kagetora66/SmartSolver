@@ -60,7 +60,7 @@ def extract_ssd_parameters(log_content):
             serial_match = re.search(r"Serial Number:\s+(\S+)", block, re.IGNORECASE)
             serial_number = serial_match.group(1) if serial_match else "Unknown"
             model_match =  re.search(r"Device Model:\s+(\S+)", block, re.IGNORECASE)
-            device_model = serial_match.group(1) if model_match else "Unknown" 
+            device_model = model_match.group(1) if model_match else "Unknown" 
             if is_sas_ssd:
                 # --- SAS SSD extraction (existing logic) ---
                 elements_grown_defect = re.search(r"Elements in grown defect list:\s+(\d+)", block)
@@ -68,7 +68,11 @@ def extract_ssd_parameters(log_content):
                 load_unload_cycles = re.search(r"Accumulated load-unload cycles:\s+(\d+)", block)
                 read_error_match = re.search(r"read:.*?(\d+)\s*$", block, re.MULTILINE)
                 write_error_match = re.search(r"write:.*?(\d+)\s*$", block, re.MULTILINE)
-                
+                endurance_indicator = re.search(r"SS Media used endurance indicator:\s+(\d+)", block)
+                model_match_sas = re.search(r"Product:\s+(\S+)", block, re.IGNORECASE)
+                device_model = model_match_sas.group(1) if model_match_sas else "Unknown" 
+                brand = "Samsung"
+
                 read_error_value = int(read_error_match.group(1)) if read_error_match else 0
                 write_error_value = int(write_error_match.group(1)) if write_error_match else 0
                 total_uncorrected_errors = read_error_value + write_error_value
@@ -77,9 +81,9 @@ def extract_ssd_parameters(log_content):
                     ("Elements in grown defect list", elements_grown_defect),
                     ("Total Uncorrected Errors", total_uncorrected_errors),
                     ("Accumulated start-stop cycles", start_stop_cycles),
-                    ("Accumulated load-unload cycles", load_unload_cycles)
+                    ("Accumulated load-unload cycles", load_unload_cycles),
+                    ("SS Media used endurance", endurance_indicator)
                 ]
-                
                 for param, match in hdd_values:
                     if isinstance(match, int):  # For Total Uncorrected Errors
                         raw_value = str(match)
@@ -88,11 +92,12 @@ def extract_ssd_parameters(log_content):
                     else:
                         continue
                     data.append({
-                        "Serial Number": serial_number,
+                        "Brand" : brand,
                         "Device Model": device_model, 
+                        "Serial Number": serial_number,
                         "Parameter": param,
                         "Value": "-",
-                        "Raw Value": raw_value
+                        "Raw Value": raw_value,
                     })
                     
             else:
@@ -103,6 +108,7 @@ def extract_ssd_parameters(log_content):
                 total_lba_written = None  # To store Total_LBAs_Written when found
                 
                 if is_micron_ssd:
+                    brand = "Micron"
                     # Define the list of expected Micron SMART parameters.
                     micron_params = [
                         "Raw_Read_Error_Rate", 
@@ -117,8 +123,9 @@ def extract_ssd_parameters(log_content):
                         # Check for the known Micron parameters.
                         if attr_name in micron_params:
                             data.append({
-                                "Serial Number": serial_number,
+                                "Brand": brand,
                                 "Device Model": device_model,
+                                "Serial Number": serial_number,
                                 "Parameter": attr_name,
                                 "Value": value,
                                 "Raw Value": raw_value
@@ -130,8 +137,9 @@ def extract_ssd_parameters(log_content):
                             except ValueError:
                                 total_lba_written = None
                             data.append({
-                                "Serial Number": serial_number,
+                                "Brand": brand,
                                 "Device Model": device_model,
+                                "Serial Number": serial_number,
                                 "Parameter": "Total_LBAs_Written",
                                 "Value": value,
                                 "Raw Value": raw_value
@@ -140,13 +148,15 @@ def extract_ssd_parameters(log_content):
                     if total_lba_written is not None:
                         total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024
                         data.append({
-                            "Serial Number": serial_number,
+                            "Brand": brand,
                             "Device Model": device_model,
+                            "Serial Number": serial_number,
                             "Parameter": "Total Size Written (TB)",
                             "Value": "-",
                             "Raw Value": f"{total_size_written_tb:.2f}"
                         })
                 else:
+                    brand = "SAMSUNG"
                     # Existing logic for non-Micron SATA SSDs
                     for match in smart_matches:
                         attr_id, attr_name, value, raw_value = match
@@ -157,17 +167,19 @@ def extract_ssd_parameters(log_content):
                                 except ValueError:
                                     total_lba_written = None
                             data.append({
-                                "Serial Number": serial_number,
+                                "Brand": brand,
                                 "Device Model": device_model,
+                                "Serial Number": serial_number,
                                 "Parameter": attr_name,
                                 "Value": value,
-                                "Raw Value": raw_value
+                                "Raw Value": raw_valu,
                             })
                     if total_lba_written is not None:
                         total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024
                         data.append({
-                            "Serial Number": serial_number,
+                            "Brand": brand,
                             "Device Model": device_model,
+                            "Serial Number": serial_number,
                             "Parameter": "Total Size Written (TB)",
                             "Value": "-",
                             "Raw Value": f"{total_size_written_tb:.2f}"
@@ -175,13 +187,14 @@ def extract_ssd_parameters(log_content):
             
             # Add an empty row after each disk's data for readability.
             data.append({
-                "Serial Number": "",
+                "Brand": "",
                 "Device Model": "",
+                "Serial Number": "",
                 "Parameter": "",
                 "Value": "",
                 "Raw Value": ""
             })
-            for i in range(len(data) - 1):
+            for i in range(len(data) - 2):
                 if (
                     data[i]["Parameter"] == "Total_LBAs_Written" and
                     data[i + 1]["Parameter"] == "Unused_Rsvd_Blk_Cnt_Tot"
@@ -204,6 +217,9 @@ def extract_hdd_parameters(log_content):
 
             model_match =  re.search(r"Device Model:\s+(\S+)", block, re.IGNORECASE)
             model_match_hp = re.search(r"Product:\s+(\S+)", block, re.IGNORECASE)
+
+            seagate_match =  re.search(r"Vendor:\s+(\S+)", block, re.IGNORECASE)
+            brand = seagate_match.group(1) if seagate_match else "HP"
             device_model = (
                     model_match.group(1) if model_match 
                     else model_match_hp.group(1) if model_match_hp
@@ -234,8 +250,9 @@ def extract_hdd_parameters(log_content):
                 if isinstance(match, int):  # For Total Uncorrected Errors
                     raw_value = str(match)
                     data.append({
-                        "Serial Number": serial_number,
+                        "Brand": brand,
                         "Device Model": device_model,
+                        "Serial Number": serial_number,
                         "Parameter": param,
                         "Value": "-",
                         "Raw Value": raw_value
@@ -243,16 +260,18 @@ def extract_hdd_parameters(log_content):
                 elif match:
                     raw_value = match.group(1) if hasattr(match, "group") else str(match)
                     data.append({
-                        "Serial Number": serial_number,
+                        "Brand": brand,
                         "Device Model": device_model,
+                        "Serial Number": serial_number,
                         "Parameter": param,
                         "Value": "-",
                         "Raw Value": raw_value
                     })
             # Add an empty row after each disk's data
             data.append({
-                "Serial Number": "",
+                "Brand": "",
                 "Device Model": "",
+                "Serial Number": "",
                 "Parameter": "",
                 "Value": "",
                 "Raw Value": ""
@@ -431,10 +450,10 @@ def extract_host_info():
     #Checks for new scst file inside script directory
     is_new_scst = os.path.isfile(os.path.join(os.path.dirname(__file__), 'scst.conf'))
     if is_new_scst:
-        scst_files = "scst.conf"
-        input_file = scst_files
+       # scst_files = "scst.conf"
+        input_file = 'scst.conf'
     else:
-        scst_files = sorted(glob.glob(os.path.join(scst_dir, "scst_2*.conf")), reverse=True)
+        scst_files = sorted(glob.glob(os.path.join(scst_dir, "scst_20*.conf")), reverse=True)
         input_file = scst_files[0]
     if not scst_files:
         print("Error: No 'scst_*.conf' files found in /SCST directory.")
@@ -764,14 +783,17 @@ for sheet_name in wb.sheetnames:
     ws = wb[sheet_name]
     if sheet_name != "Device Info":  # Skip merging for "Device Info" sheet
         merge_cells_for_column(ws, 1)  # Merge "Enclosure/Slot" column (column 1)
-        merge_cells_for_column(ws, 2)  # Merge "Serial Number" column (column 2)
-        merge_cells_for_column(ws, 3)  # Merge "Device Model" column (column 3)
-        merge_cells_for_column(ws, 11)  # Merge "Disk State" column (column 10)
+        merge_cells_for_column(ws, 3)  # Merge "Serial Number" column (column 2)
+        merge_cells_for_column(ws, 4)  # Merge "Device Model" column (column 4)
+        merge_cells_for_column(ws, 12)  # Merge "Disk State" column (column 12)
+        merge_cells_for_column(ws, 2)  # Merge "Brand" column (column 2)
+    adjust_column_widths(ws)  # Adjust column widths for all sheets
     adjust_column_widths(ws)  # Adjust column widths for all sheets
     adjust_column_widths(ws)  # Adjust column widths for all sheets
 if "Host Info" in wb.sheetnames: 
     host_info_sheet = wb["Host Info"]
     merge_cells_for_column(host_info_sheet, 4)  # Merge "Initiators" column (column 4)
     merge_cells_for_column(host_info_sheet, 5)  # Merge "Targets" column (column 5) 
+    merge_cells_for_column(host_info_sheet, 6)  # Merge "Connection type" column (column 6) 
 wb.save(excel_path)
 print("SMART data, device info, and host info extracted and written to smart_data.xlsx with proper formatting.")
