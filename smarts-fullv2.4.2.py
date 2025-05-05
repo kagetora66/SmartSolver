@@ -80,7 +80,6 @@ def extract_ssd_parameters(log_content):
                 hdd_values = [
                     ("Elements in grown defect list", elements_grown_defect),
                     ("Total Uncorrected Errors", total_uncorrected_errors),
-                    ("Accumulated start-stop cycles", start_stop_cycles),
                     ("Accumulated load-unload cycles", load_unload_cycles),
                     ("SS Media used endurance", endurance_indicator)
                 ]
@@ -448,10 +447,10 @@ def extract_host_info():
     scst_dir = "./SCST"
     db_dir = "./Database"
     #Checks for new scst file inside script directory
-    is_new_scst = os.path.isfile(os.path.join(os.path.dirname(__file__), 'scst.conf'))
-    if is_new_scst:
-       # scst_files = "scst.conf"
-        input_file = 'scst.conf'
+    new_scst_matches = glob.glob(os.path.join(script_dir, "scst.*"))
+    if new_scst_matches:
+        scst_files = new_scst_matches[0]
+        input_file = scst_files
     else:
         scst_files = sorted(glob.glob(os.path.join(scst_dir, "scst_20*.conf")), reverse=True)
         input_file = scst_files[0]
