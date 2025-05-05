@@ -80,8 +80,8 @@ def extract_ssd_parameters(log_content):
                 hdd_values = [
                     ("Elements in grown defect list", elements_grown_defect),
                     ("Total Uncorrected Errors", total_uncorrected_errors),
-                    ("Accumulated load-unload cycles", load_unload_cycles),
-                    ("SS Media used endurance", endurance_indicator)
+                    ("Accumulated start-stop cycles", start_stop_cycles),
+                    ("SS Media used endurance indicator %", endurance_indicator)
                 ]
                 for param, match in hdd_values:
                     if isinstance(match, int):  # For Total Uncorrected Errors
@@ -171,7 +171,7 @@ def extract_ssd_parameters(log_content):
                                 "Serial Number": serial_number,
                                 "Parameter": attr_name,
                                 "Value": value,
-                                "Raw Value": raw_valu,
+                                "Raw Value": raw_value
                             })
                     if total_lba_written is not None:
                         total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024
@@ -290,6 +290,7 @@ def extract_device_info(log_content):
          hours_match = re.search(r"number of hours powered up\s+=\s+([\d.]+)", block)
          #For Samsung SSDs
          temp_match_sam = re.search(r"194\s+[\w_]+\s+[\w\d]+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+-\s+(\d+)", block)
+         if not temp_match_sam: temp_match_sam = re.search(r"190\s+[\w_]+\s+[\w\d]+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+-\s+(\d+)", block) 
          hours_match_sam = re.search(r"9\s+[\w_]+\s+[\w\d]+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+-\s+(\d+)", block)
          if serial_number and temp_match:
              temperature = f"{temp_match.group(1)}"
