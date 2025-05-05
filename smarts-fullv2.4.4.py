@@ -59,7 +59,7 @@ def extract_ssd_parameters(log_content):
         if is_ssd:
             serial_match = re.search(r"Serial Number:\s+(\S+)", block, re.IGNORECASE)
             serial_number = serial_match.group(1) if serial_match else "Unknown"
-            model_match =  re.search(r"Device Model:\s+(\S+)", block, re.IGNORECASE)
+            model_match =  re.search(r"Device Model:\s+(.+)", block, re.IGNORECASE)
             device_model = model_match.group(1) if model_match else "Unknown" 
             if is_sas_ssd:
                 # --- SAS SSD extraction (existing logic) ---
@@ -397,6 +397,7 @@ def extract_enclosure_slot_info(log_content, serial_numbers):
 def extract_sysinfo():
     sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
     version_file = os.path.join(script_dir, "version")
+    pmc_file = os.path.join(script_dir, "output.txt")
     sys_info = {}
     voltage_index = 1 #For separting the two power modules
     current_index = 1 #For separating the two power modules
@@ -421,20 +422,33 @@ def extract_sysinfo():
                 if current_match:
                     sys_info[f"Current{current_index}"] = float(current_match.group(1))
                     current_index += 1
-        # Extract versions from version file
-        with open(version_file, "r") as file:
-            content = file.read()
-            versions = {
-                "UI Version": re.search(r'UI Version:\s*([\d.]+)', content),
-                "CLI Version": re.search(r'CLI Version:\s*([\d.]+)', content),
-                "SAB Version": re.search(r'SAB Version:\s*([\d.]+)', content)
-            }
+        if pmc_file:
+            # Extract versions from pmc output
+            with open(pmc_file, "r") as file:
+                content = file.read()
+                versions ={
+                    "SAB Version": re.search(r'#SAB version\s+([^\s]+)', content),
+                    "Replication Version": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
+                    "Rapidtier Version": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
+                    "UI Version": re.search(r'__version__\s*=\s*"([^"]+)"', content),
+                    "CLI Version": re.search(r'CLI Version:\s*([^\s]+)', content)
+                }
+                #versions = {k: v.group(1) if v else "" for k, v in versions.items()}
+        else:
+            # Extract versions from version file
+            with open(version_file, "r") as file:
+                content = file.read()
+                versions = {
+                    "UI Version": re.search(r'UI Version:\s*([\d.]+)', content),
+                    "CLI Version": re.search(r'CLI Version:\s*([\d.]+)', content),
+                    "SAB Version": re.search(r'SAB Version:\s*([\d.]+)', content)
+                }
             
-            for name, match in versions.items():
-                if match:
-                    sys_info[name] = match.group(1)
-                else:
-                    sys_info[name] = "Not Found"
+        for name, match in versions.items():
+            if match:
+                sys_info[name] = match.group(1)
+            else:
+                sys_info[name] = "Not Found"
                     
         # Convert to list of dict format that pandas expects
         return [sys_info]
@@ -593,20 +607,27 @@ def extract_host_info():
                                     "Target Address": target,
                                     "Connection Type": port_type
                                 })
-        if not host_data and target_port_type:
-            for target, port_type in target_port_type.items():
-                host_data.append({
-                    "Access Point": "",
-                    "Host": "",
-                    "LUNs": "",
-                    "Initiator Addresses": "",
-                    "Target Addresses": target,
-                    "Connection Type": port_type
-                    })
+        if not host_data:
+            if target_port_type:
+                for target, port_type in target_port_type.items():
+                    host_data.append({
+                        "Access Point": groups,
+                        "Host": "",
+                        "LUNs": "",
+                        "Initiator Addresses": "",
+                        "Target Addresses": target,
+                        "Connection Type": port_type
+                        })
+            else:
+                    host_data.append({
+                        "Access Point": groups,
+                        "Host": "",
+                        "LUNs": "",
+                        "Initiator Addresses": "",
+                        "Target Addresses": "",
+                        "Connection Type": ""
+                        })
 
-
-#        print(f"[DEBUG] Parsed {len(target_blocks)} target blocks.")
-#        print(f"[DEBUG] Returning {len(host_data)} host entries.")
         return host_data
 
     except Exception as e:
@@ -776,7 +797,7 @@ def adjust_column_widths(ws):
     for col in ws.columns:
         max_length = max((len(str(cell.value)) for cell in col if cell.value), default=10)
         col_letter = get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = max_length + 2
+        ws.column_dimensions[col_letter].width = max_length + 1
 
 # Format all sheets except "Device Info"
 for sheet_name in wb.sheetnames:
