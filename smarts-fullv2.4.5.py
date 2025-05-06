@@ -397,7 +397,7 @@ def extract_enclosure_slot_info(log_content, serial_numbers):
 def extract_sysinfo():
     sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
     version_file = os.path.join(script_dir, "version")
-    pmc_file = os.path.join(script_dir, "output.txt")
+    pmc_file = glob.glob(os.path.join(script_dir, "output.txt"))
     sys_info = {}
     voltage_index = 1 #For separting the two power modules
     current_index = 1 #For separating the two power modules
@@ -426,7 +426,7 @@ def extract_sysinfo():
             # Extract versions from pmc output
             with open(pmc_file, "r") as file:
                 content = file.read()
-                versions ={
+                versions = {
                     "SAB Version": re.search(r'#SAB version\s+([^\s]+)', content),
                     "Replication Version": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
                     "Rapidtier Version": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
