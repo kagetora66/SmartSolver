@@ -424,7 +424,7 @@ def extract_sysinfo():
                     current_index += 1
         if pmc_file:
             # Extract versions from pmc output
-            with open(pmc_file, "r") as file:
+            with open(pmc_file[0], "r") as file:
                 content = file.read()
                 versions = {
                     "SAB Version": re.search(r'#SAB version\s+([^\s]+)', content),
@@ -797,7 +797,7 @@ def adjust_column_widths(ws):
     for col in ws.columns:
         max_length = max((len(str(cell.value)) for cell in col if cell.value), default=10)
         col_letter = get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = max_length + 1
+        ws.column_dimensions[col_letter].width = max_length + 2
 
 # Format all sheets except "Device Info"
 for sheet_name in wb.sheetnames:
