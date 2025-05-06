@@ -9,6 +9,7 @@ import glob
 import sqlite3
 import getpass
 from zipfile import ZipFile
+import subprocess
 # Define required parameters
 ssd_params = [
     "Reallocated_Sector_Ct",
@@ -402,19 +403,37 @@ def extract_sysinfo():
     voltage_index = 1 #For separting the two power modules
     current_index = 1 #For separating the two power modules
     try:
+        # Extract uptime and serial number from SystemInfo.mylinux
+        with open(sysinfo_file, "r") as file:
+            for line in file:
+                uptime_match = re.search(r"up\s+(\d+)\s+days?", line)
+                serial_match = re.search(r"Serial Number:\s*ZM(\S+)", line)
+                voltage_match = re.search(r"Input Voltage\s*\|\s*([\d.]+)\s*V", line)
+                current_match = re.search(r"Input Current \s*\|\s*([\d.]+)\s*A", line) 
+                if uptime_match:
+                    sys_info["Uptime (days)"] = int(uptime_match.group(1))
+                    break
+                else:
+                    sys_info["Uptime (days)"] = 0
+                if serial_match:
+                     sys_info["Serial Number"] = serial_match.group(1)
+                if voltage_match:
+                    sys_info[f"Voltage{voltage_index}"] = float(voltage_match.group(1))
+                    voltage_index += 1
+                if current_match:
+                    sys_info[f"Current{current_index}"] = float(current_match.group(1))
+                    current_index += 1
         if pmc_file:
             # Extract versions from pmc output
             with open(pmc_file[0], "r") as file:
                 content = file.read()
                 versions = {
-                    "SAB ID": re.search(r"SAB(\d+)", content),
                     "SAB Version": re.search(r'#SAB version\s+([^\s]+)', content),
                     "Replication Version": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
                     "Rapidtier Version": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
                     "UI Version": re.search(r'__version__\s*=\s*"([^"]+)"', content),
                     "CLI Version": re.search(r'CLI Version:\s*([^\s]+)', content)
-                }        
-
+                }
                 #versions = {k: v.group(1) if v else "" for k, v in versions.items()}
         else:
             # Extract versions from version file
@@ -431,26 +450,6 @@ def extract_sysinfo():
                 sys_info[name] = match.group(1)
             else:
                 sys_info[name] = "Not Found"
-        # Extract uptime and serial number from SystemInfo.mylinux
-        with open(sysinfo_file, "r") as file:
-            for line in file:
-                uptime_match = re.search(r"up\s+(\d+)\s+days?", line)
-                serial_match = re.search(r"Serial Number:\s*ZM(\S+)", line)
-                voltage_match = re.search(r"Input Voltage\s*\|\s*([\d.]+)\s*V", line)
-                current_match = re.search(r"Input Current \s*\|\s*([\d.]+)\s*A", line)
-                if uptime_match:
-                    sys_info["Uptime (days)"] = int(uptime_match.group(1))
-                    break
-                else:
-                    sys_info["Uptime (days)"] = 0
-                if serial_match:
-                     sys_info["Serial Number"] = serial_match.group(1)
-                if voltage_match:
-                    sys_info[f"Voltage{voltage_index}"] = float(voltage_match.group(1))
-                    voltage_index += 1
-                if current_match:
-                    sys_info[f"Current{current_index}"] = float(current_match.group(1))
-                    current_index += 1
                     
         # Convert to list of dict format that pandas expects
         return [sys_info]
@@ -648,48 +647,13 @@ def extract_host_info():
         if 'conn' in locals():
             conn.close()
 def extractor():
-    script_dir = os.getcwd()
-    passwd = getpass.getpass("Enter ZIP password: ")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    rust_binary = os.path.join(script_dir, "extractor")
 
-    # Find full_log.zip or full_log.log
-    log_file = None
-    for file in os.scandir(script_dir):
-        if 'full_log' in file.name.lower():
-            log_file = file.name
-            break
-
-    if not log_file:
-        print("No log file found.")
-        return
-
-    # Rename if needed
-    if log_file.lower().endswith('.log'):
-        zip_name = log_file[:-4] + '.zip'
-        os.rename(log_file, zip_name)
-        log_file = zip_name
-
-    # First unzip (password-protected)
-    with ZipFile(log_file, 'r') as zip_ref:
-        zip_ref.extractall(script_dir, pwd=bytes(passwd, 'utf-8'))
-
-    # Find inner zip
-    inner_zip = None
-    for file in os.scandir(script_dir):
-        if file.name.endswith('.zip') and 'full_log' not in file.name.lower():
-            inner_zip = file.name
-            break
-
-    if inner_zip:
-        with ZipFile(inner_zip, 'r') as zip_ref:
-            # Safe extract to avoid absolute paths or path traversal
-            for member in zip_ref.namelist():
-                member_path = os.path.normpath(member)
-                if not member_path.startswith("..") and not os.path.isabs(member_path):
-                    target_path = os.path.join(script_dir, member_path)
-                    zip_ref.extract(member, script_dir)
-            print("Extraction complete.")
-    else:
-        print("No inner zip file found.")
+    try:
+        subprocess.run([rust_binary], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Rust extractor failed: {e}")
 script_dir = os.path.dirname(os.path.abspath(__file__))
 #Extract files
 if not os.path.isfile(os.path.join(script_dir, 'version')):
