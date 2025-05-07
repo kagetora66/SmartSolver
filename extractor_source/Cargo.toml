@@ -1,0 +1,8 @@
+[package]
+name = "unzip-tool"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+zip = { version = "0.6", features = ["aes-crypto"] }
+rpassword = "7.2.0"
