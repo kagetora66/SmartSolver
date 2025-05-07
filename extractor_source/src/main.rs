@@ -9,20 +9,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Found main zip file: {}", zip_path.display());
 
     let password = rpassword::prompt_password("Enter password: ")?;
-    extract_zip(&zip_path, &password)?;
+    extract_zip(&zip_path, Some(&password))?;
 
     // Find and extract additional zips
     let other_zips = find_other_zips()?;
     for zip in other_zips {
         println!("Found additional zip: {}", zip.display());
-        extract_zip_unlocked(&zip)?;
+        extract_zip(&zip, None)?;
     }
 
     println!("All extractions completed!");
     Ok(())
 }
 
-// Existing functions remain the same
 fn find_zip_file() -> Result<PathBuf, Box<dyn std::error::Error>> {
     for entry in std::fs::read_dir(".")? {
         let entry = entry?;
@@ -38,7 +37,6 @@ fn find_zip_file() -> Result<PathBuf, Box<dyn std::error::Error>> {
     Err("No 'full_log*.zip' file found".into())
 }
 
-// New function to find other zips
 fn find_other_zips() -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
     let mut zips = Vec::new();
     for entry in std::fs::read_dir(".")? {
@@ -55,33 +53,19 @@ fn find_other_zips() -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
     Ok(zips)
 }
 
-// Modified to handle both password and non-password extraction
-fn extract_zip(zip_path: &Path, password: &str) -> Result<(), Box<dyn std::error::Error>> {
-    // Password verification logic remains the same
-    {
-        let file = File::open(zip_path)?;
-        let mut archive = ZipArchive::new(file)?;
-        let test_file = archive.by_index_decrypt(0, password.as_bytes());
-        
+fn extract_zip(zip_path: &Path, password: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    let file = File::open(zip_path)?;
+    let mut archive = ZipArchive::new(file)?;
+
+    // Verify password if provided
+    if let Some(pwd) = password {
+        let test_file = archive.by_index_decrypt(0, pwd.as_bytes());
         match test_file {
             Ok(Ok(_)) => (),
-            Ok(Err(zip::result::InvalidPassword)) => return Err("Invalid password".into()),
+            Ok(Err(_)) => return Err("Invalid password".into()),
             Err(e) => return Err(e.into()),
         }
     }
-
-    extract_zip_contents(zip_path, Some(password))
-}
-
-// New function for non-password extraction
-fn extract_zip_unlocked(zip_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    extract_zip_contents(zip_path, None)
-}
-
-// Common extraction logic
-fn extract_zip_contents(zip_path: &Path, password: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-    let file = File::open(zip_path)?;
-    let mut archive = ZipArchive::new(file)?;
 
     for i in 0..archive.len() {
         let mut file = match password {
@@ -93,7 +77,8 @@ fn extract_zip_contents(zip_path: &Path, password: Option<&str>) -> Result<(), B
             None => archive.by_index(i)?,
         };
 
-        let outpath = file.mangled_name();
+        // Windows-safe path handling
+        let outpath = sanitize_windows_path(&file.mangled_name());
         if file.is_dir() {
             std::fs::create_dir_all(&outpath)?;
         } else {
@@ -107,4 +92,20 @@ fn extract_zip_contents(zip_path: &Path, password: Option<&str>) -> Result<(), B
         }
     }
     Ok(())
+}
+
+fn sanitize_windows_path(path: &Path) -> PathBuf {
+    let mut sanitized = PathBuf::new();
+    for component in path.components() {
+        if let Some(s) = component.as_os_str().to_str() {
+            let cleaned = s.replace(|c: char| 
+                c == '<' || c == '>' || c == ':' || 
+                c == '"' || c == '/' || c == '\\' || 
+                c == '|' || c == '?' || c == '*',
+                "_"
+            );
+            sanitized.push(cleaned);
+        }
+    }
+    sanitized
 }
