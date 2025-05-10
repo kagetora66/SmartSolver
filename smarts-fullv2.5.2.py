@@ -428,6 +428,7 @@ def extract_sysinfo():
             with open(pmc_file[0], "r") as file:
                 content = file.read()
                 versions = {
+                    "SAB ID" : re.search(r"(SAB\d+|ID_\d+)", content),
                     "SAB Version": re.search(r'#SAB version\s+([^\s]+)', content),
                     "Replication Version": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
                     "Rapidtier Version": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
