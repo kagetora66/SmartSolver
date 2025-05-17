@@ -37,7 +37,37 @@ micron_ssd_params = {
     "Unused_Rsvd_Blk_Cnt_Tot": "180",
     "Total_LBAs_Written": "246"  # Unknown attribute at ID# 246
 }
+threshold_sas_ssd = {
+    "Elements in grown defect list": "799",
+    "Total Uncorrected Errors": "39",
+    "Accumulated start-stop cycles": "8999",
+    "SS Media used endurance indicator %": "90"
+} 
+threshold_sata_ssd = {
+    "Reallocated_Sector_Ct": "10",
+    "Power_On_Hours": "5",
+    "Wear_Leveling_Count": "10",
+    "Used_Rsvd_Blk_Cnt_Tot": "10",
+    "Runtime_Bad_Block": "10",
+    "Reported_Uncorrect": "97",
+    "Hardware_ECC_Recovered": "100",
+    "Total Size Written (TB)": "6400"
+} 
+threshold_hdd_sata = {
+    "Elements in grown defect list": "799",
+    "Total Uncorrected Errors": "39",
+    "Accumulated start-stop cycles": "8999",
+    "Accumulated load-unload cycles": "269000"
+} 
+threshold_micron_ssd = {
+    "Raw_Read_Error_Rate": "50",
+    "Reallocated_Sector_Ct": "1",
+    "Reported_Uncorrect": "0",
+    "Hardware_ECC_Recovered": "0",
+    "Unused_Rsvd_Blk_Cnt_Tot": "0",
+    "Total Size Written (TB)": "6400"
     
+}
 # Regular expression to extract SMART attributes
 smart_pattern = re.compile(
     r"(\d+)\s+([\w_]+)\s+0x[0-9a-fA-F]+\s+(\d+)\s+\d+\s+\d+\s+\w+-?\w*\s+\w+\s+-\s+(\d+)"
@@ -84,6 +114,8 @@ def extract_ssd_parameters(log_content):
                     ("Accumulated start-stop cycles", start_stop_cycles),
                     ("SS Media used endurance indicator %", endurance_indicator)
                 ]
+
+                #threshold_dict = dict(threshold_sam_ssd)
                 for param, match in hdd_values:
                     if isinstance(match, int):  # For Total Uncorrected Errors
                         raw_value = str(match)
@@ -91,13 +123,15 @@ def extract_ssd_parameters(log_content):
                         raw_value = match.group(1)
                     else:
                         continue
+                    threshold = threshold_sam_ssd.get(param, "-")
                     data.append({
                         "Brand" : brand,
                         "Device Model": device_model, 
                         "Serial Number": serial_number,
                         "Parameter": param,
+                        "Threshold" : threshold,
                         "Value": "-",
-                        "Raw Value": raw_value,
+                        "Raw Value": raw_value
                     })
                     
             else:
@@ -117,16 +151,18 @@ def extract_ssd_parameters(log_content):
                         "Hardware_ECC_Recovered", 
                         "Unused_Rsvd_Blk_Cnt_Tot"
                     ]
-                    
+
                     for match in smart_matches:
                         attr_id, attr_name, value, raw_value = match
                         # Check for the known Micron parameters.
                         if attr_name in micron_params:
+                            threshold = threshold_micron_ssd.get(attr_name, "-")     
                             data.append({
                                 "Brand": brand,
                                 "Device Model": device_model,
                                 "Serial Number": serial_number,
                                 "Parameter": attr_name,
+                                "Threshold": threshold,
                                 "Value": value,
                                 "Raw Value": raw_value
                             })
@@ -141,17 +177,20 @@ def extract_ssd_parameters(log_content):
                                 "Device Model": device_model,
                                 "Serial Number": serial_number,
                                 "Parameter": "Total_LBAs_Written",
+                                "Threshold": threshold,
                                 "Value": value,
                                 "Raw Value": raw_value
                             })
                             
                     if total_lba_written is not None:
                         total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024
+                        threshold = threshold_micron_ssd.get("Total Size Written (TB)", "-")
                         data.append({
                             "Brand": brand,
                             "Device Model": device_model,
                             "Serial Number": serial_number,
                             "Parameter": "Total Size Written (TB)",
+                            "Threshold": threshold,
                             "Value": "-",
                             "Raw Value": f"{total_size_written_tb:.2f}"
                         })
@@ -160,7 +199,8 @@ def extract_ssd_parameters(log_content):
                     # Existing logic for non-Micron SATA SSDs
                     for match in smart_matches:
                         attr_id, attr_name, value, raw_value = match
-                        if attr_name in ssd_params:  # ssd_params defined elsewhere
+                        if attr_name in ssd_params: # ssd_params defined elsewhere
+                            threshold = threshold_sata_ssd.get(attr_name, "-")
                             if attr_name == "Total_LBAs_Written":
                                 try:
                                     total_lba_written = int(raw_value)
@@ -171,16 +211,19 @@ def extract_ssd_parameters(log_content):
                                 "Device Model": device_model,
                                 "Serial Number": serial_number,
                                 "Parameter": attr_name,
+                                "Threshold": threshold,
                                 "Value": value,
                                 "Raw Value": raw_value
                             })
                     if total_lba_written is not None:
                         total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024
+                        threshold = threshold_sata_ssd.get("Total Size Written (TB)", "-")
                         data.append({
                             "Brand": brand,
                             "Device Model": device_model,
                             "Serial Number": serial_number,
                             "Parameter": "Total Size Written (TB)",
+                            "Threshold": threshold,
                             "Value": "-",
                             "Raw Value": f"{total_size_written_tb:.2f}"
                         })
@@ -249,21 +292,25 @@ def extract_hdd_parameters(log_content):
             for param, match in hdd_values:
                 if isinstance(match, int):  # For Total Uncorrected Errors
                     raw_value = str(match)
+                    threshold = threshold_hdd_sata.get(param, "-")
                     data.append({
                         "Brand": brand,
                         "Device Model": device_model,
                         "Serial Number": serial_number,
                         "Parameter": param,
+                        "Threshold": threshold,
                         "Value": "-",
                         "Raw Value": raw_value
                     })
                 elif match:
                     raw_value = match.group(1) if hasattr(match, "group") else str(match)
+                    threshold = threshold_hdd_sata.get(param, "-")
                     data.append({
                         "Brand": brand,
                         "Device Model": device_model,
                         "Serial Number": serial_number,
                         "Parameter": param,
+                        "Threshold": threshold,
                         "Value": "-",
                         "Raw Value": raw_value
                     })
@@ -273,6 +320,7 @@ def extract_hdd_parameters(log_content):
                 "Device Model": "",
                 "Serial Number": "",
                 "Parameter": "",
+                "Threshod": "",
                 "Value": "",
                 "Raw Value": ""
             })
@@ -496,8 +544,8 @@ def extract_host_info():
                 current_wwn = line
                 current_wwn = current_wwn.lower().replace('0x', '')
                 current_wwn = ':'.join(current_wwn[i:i+2] for i in range(0, len(current_wwn), 2))
-            elif line.startswith('Point') or line.startswith("NPort") and current_wwn:
-                if line.startswith('Point'):
+            elif ('Point' in line or 'NPort' in line) and current_wwn:
+                if 'Point' in line:
                     port_type = "Point to Point"
                 else:
                     port_type = "SAN Switch"
