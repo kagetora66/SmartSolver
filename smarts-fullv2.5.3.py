@@ -427,15 +427,20 @@ def extract_sysinfo():
             # Extract versions from pmc output
             with open(pmc_file[0], "r") as file:
                 content = file.read()
+               # sabversion_match = re.search(r'hostname\s*:\s*\n+([^\n\S]*\n)*?([^\s\n][^\n]*)', content, re.IGNORECASE)
+                #if sabversion_match:
+                 #   sabversion = sabversion_match.group(2) 
+                #else: 
+                #    sabversion = ""
+                #print(sabversion)
                 versions = {
-                    "SAB ID" : re.search(r"(SAB\d+|ID_\d+)", content),
+                    "SAB ID": re.search(r'hostname\s*:\s*(.*)$', content, re.IGNORECASE | re.MULTILINE), 
                     "SAB Version": re.search(r'#SAB version\s+([^\s]+)', content),
                     "Replication Version": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
                     "Rapidtier Version": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
                     "UI Version": re.search(r'__version__\s*=\s*"([^"]+)"', content),
                     "CLI Version": re.search(r'CLI Version:\s*([^\s]+)', content)
                 }
-                #versions = {k: v.group(1) if v else "" for k, v in versions.items()}
         else:
             # Extract versions from version file
             with open(version_file, "r") as file:
