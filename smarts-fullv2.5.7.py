@@ -320,7 +320,6 @@ def extract_hdd_parameters(log_content):
                 "Device Model": "",
                 "Serial Number": "",
                 "Parameter": "",
-                "Threshod": "",
                 "Value": "",
                 "Raw Value": ""
             })
@@ -825,8 +824,9 @@ for sheet_name in wb.sheetnames:
         merge_cells_for_column(ws, 1)  # Merge "Enclosure/Slot" column (column 1)
         merge_cells_for_column(ws, 3)  # Merge "Serial Number" column (column 2)
         merge_cells_for_column(ws, 4)  # Merge "Device Model" column (column 4)
-        merge_cells_for_column(ws, 12)  # Merge "Disk State" column (column 12)
         merge_cells_for_column(ws, 2)  # Merge "Brand" column (column 2)
+        for column in range(9,14):
+            merge_cells_for_column(ws, column)
     adjust_column_widths(ws)  # Adjust column widths for all sheets
     adjust_column_widths(ws)  # Adjust column widths for all sheets
     adjust_column_widths(ws)  # Adjust column widths for all sheets
