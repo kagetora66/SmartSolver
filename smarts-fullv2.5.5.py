@@ -540,10 +540,9 @@ def extract_host_info():
         #We map port connection to wwn addresses 
         for line in lines:
             line = line.strip()
-            if line.startswith('0x'):
-                current_wwn = line
-                current_wwn = current_wwn.lower().replace('0x', '')
-                current_wwn = ':'.join(current_wwn[i:i+2] for i in range(0, len(current_wwn), 2))
+            if line.lower().startswith("wwn = 0x"):
+                hex_str = line.split('=')[1].strip().lower().replace('0x', '')
+                current_wwn = ':'.join(hex_str[i:i+2] for i in range(0, len(hex_str), 2))
             elif ('Point' in line or 'NPort' in line) and current_wwn:
                 if 'Point' in line:
                     port_type = "Point to Point"
