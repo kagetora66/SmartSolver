@@ -451,6 +451,36 @@ def extract_sysinfo():
     voltage_index = 1 #For separting the two power modules
     current_index = 1 #For separating the two power modules
     try:
+        if pmc_file:
+            # Extract versions from pmc output
+            with open(pmc_file[0], "r") as file:
+                content = file.read()
+                versions = {
+                    "SAB ID": re.search(r'hostname\s*:\s*(.*)$', content, re.IGNORECASE | re.MULTILINE), 
+                    "SAB Version": re.search(r'#SAB version\s+([^\s]+)', content),
+                    "Replication Version": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
+                    "Rapidtier Version": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
+                    "UI Version": re.search(r'__version__\s*=\s*"([^"]+)"', content),
+                    "CLI Version": re.search(r'CLI Version:\s*([^\s]+)', content)
+                }
+        else:
+            # Extract versions from version file
+            with open(version_file, "r") as file:
+                content = file.read()
+                versions = {
+                    "UI Version": re.search(r'UI Version:\s*([\d.]+)', content),
+                    "CLI Version": re.search(r'CLI Version:\s*([\d.]+)', content),
+                    "SAB Version": re.search(r'SAB Version:\s*([\d.]+)', content)
+                }
+
+            
+        for name, match in versions.items():
+            if match:
+                sys_info[name] = match.group(1)
+            else:
+                sys_info[name] = "Not Found"
+                    
+
         # Extract uptime and serial number from SystemInfo.mylinux
         with open(sysinfo_file, "r") as file:
             for line in file:
@@ -471,40 +501,6 @@ def extract_sysinfo():
                 if current_match:
                     sys_info[f"Current{current_index}"] = float(current_match.group(1))
                     current_index += 1
-        if pmc_file:
-            # Extract versions from pmc output
-            with open(pmc_file[0], "r") as file:
-                content = file.read()
-               # sabversion_match = re.search(r'hostname\s*:\s*\n+([^\n\S]*\n)*?([^\s\n][^\n]*)', content, re.IGNORECASE)
-                #if sabversion_match:
-                 #   sabversion = sabversion_match.group(2) 
-                #else: 
-                #    sabversion = ""
-                #print(sabversion)
-                versions = {
-                    "SAB ID": re.search(r'hostname\s*:\s*(.*)$', content, re.IGNORECASE | re.MULTILINE), 
-                    "SAB Version": re.search(r'#SAB version\s+([^\s]+)', content),
-                    "Replication Version": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
-                    "Rapidtier Version": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
-                    "UI Version": re.search(r'__version__\s*=\s*"([^"]+)"', content),
-                    "CLI Version": re.search(r'CLI Version:\s*([^\s]+)', content)
-                }
-        else:
-            # Extract versions from version file
-            with open(version_file, "r") as file:
-                content = file.read()
-                versions = {
-                    "UI Version": re.search(r'UI Version:\s*([\d.]+)', content),
-                    "CLI Version": re.search(r'CLI Version:\s*([\d.]+)', content),
-                    "SAB Version": re.search(r'SAB Version:\s*([\d.]+)', content)
-                }
-            
-        for name, match in versions.items():
-            if match:
-                sys_info[name] = match.group(1)
-            else:
-                sys_info[name] = "Not Found"
-                    
         # Convert to list of dict format that pandas expects
         return [sys_info]
     except Exception as e:
