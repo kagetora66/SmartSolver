@@ -68,9 +68,8 @@ threshold_micron_ssd = {
     "Total Size Written (TB)": "6400"
     
 }
-# Regular expression to extract SMART attributes
 smart_pattern = re.compile(
-    r"(\d+)\s+([\w_]+)\s+0x[0-9a-fA-F]+\s+(\d+)\s+\d+\s+\d+\s+\w+-?\w*\s+\w+\s+-\s+(\d+)"
+    r"(\d+)\s+([\w_]+)\s+0x[0-9a-fA-F]+\s+(\d+)\s+\d+\s+(\d+)\s+\w+-?\w*\s+\w+\s+-\s+(\d+)"
 )
 # Function to extract SSD parameters
 def extract_ssd_parameters(log_content):
@@ -115,7 +114,6 @@ def extract_ssd_parameters(log_content):
                     ("SS Media used endurance indicator %", endurance_indicator)
                 ]
 
-                #threshold_dict = dict(threshold_sam_ssd)
                 for param, match in hdd_values:
                     if isinstance(match, int):  # For Total Uncorrected Errors
                         raw_value = str(match)
@@ -153,10 +151,9 @@ def extract_ssd_parameters(log_content):
                     ]
 
                     for match in smart_matches:
-                        attr_id, attr_name, value, raw_value = match
+                        attr_id, attr_name, value, threshold, raw_value = match
                         # Check for the known Micron parameters.
                         if attr_name in micron_params:
-                            threshold = threshold_micron_ssd.get(attr_name, "-")     
                             data.append({
                                 "Brand": brand,
                                 "Device Model": device_model,
@@ -198,9 +195,8 @@ def extract_ssd_parameters(log_content):
                     brand = "SAMSUNG"
                     # Existing logic for non-Micron SATA SSDs
                     for match in smart_matches:
-                        attr_id, attr_name, value, raw_value = match
+                        attr_id, attr_name, value, threshold, raw_value = match
                         if attr_name in ssd_params: # ssd_params defined elsewhere
-                            threshold = threshold_sata_ssd.get(attr_name, "-")
                             if attr_name == "Total_LBAs_Written":
                                 try:
                                     total_lba_written = int(raw_value)
@@ -639,7 +635,7 @@ def extract_host_info():
                             port_type = "-"
                         if not data["luns"]:
                             host_data.append({
-                                "Access Point": group_name,
+                                "Access Control": group_name,
                                 "Host": host_name,
                                 "LUNs": "",
                                 "Initiator Addresses": initiator,
@@ -649,7 +645,7 @@ def extract_host_info():
                         else:
                             for lun in sorted(data["luns"]):
                                 host_data.append({
-                                    "Access Point": group_name,
+                                    "Access Control": group_name,
                                     "Host": host_name,
                                     "LUNs": lun,
                                     "Initiator Addresses": initiator,
@@ -660,7 +656,7 @@ def extract_host_info():
             if target_port_type:
                 for target, port_type in target_port_type.items():
                     host_data.append({
-                        "Access Point": groups,
+                        "Access Control": groups,
                         "Host": "",
                         "LUNs": "",
                         "Initiator Addresses": "",
@@ -669,7 +665,7 @@ def extract_host_info():
                         })
             else:
                     host_data.append({
-                        "Access Point": groups,
+                        "Access Control": groups,
                         "Host": "",
                         "LUNs": "",
                         "Initiator Addresses": "",
@@ -827,8 +823,6 @@ for sheet_name in wb.sheetnames:
         merge_cells_for_column(ws, 2)  # Merge "Brand" column (column 2)
         for column in range(9,14):
             merge_cells_for_column(ws, column)
-    adjust_column_widths(ws)  # Adjust column widths for all sheets
-    adjust_column_widths(ws)  # Adjust column widths for all sheets
     adjust_column_widths(ws)  # Adjust column widths for all sheets
 if "Host Info" in wb.sheetnames: 
     host_info_sheet = wb["Host Info"]
