@@ -10,6 +10,7 @@ import sqlite3
 import getpass
 from zipfile import ZipFile
 import subprocess
+from openpyxl.styles import PatternFill
 # Define required parameters
 ssd_params = [
     "Reallocated_Sector_Ct",
@@ -786,7 +787,56 @@ with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
 
 # Open the Excel file and format it
 wb = load_workbook(excel_path)
+yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+orange_fill = PatternFill(start_color="FFA500", end_color="FFFF00", fill_type="solid")
 
+if "SMART Data" in wb.sheetnames:
+    ws = wb["SMART Data"]
+    for row in ws.iter_rows(min_row=2):  # Skip header row (row 1)
+        # Extract relevant cells
+        threshold_cell = row[5]  # Column F (Threshold)
+        value_cell = row[6]      # Column G (Value)
+        raw_value_cell = row[7]  # Column H (Raw Value)
+        
+        threshold_str = threshold_cell.value
+        value_str = value_cell.value
+        raw_value_str = raw_value_cell.value
+
+        # Skip rows with missing/invalid thresholds
+        if not threshold_str or threshold_str == "-":
+            continue
+
+        try:
+            threshold_caution = float(threshold_str) * 1.5
+            threshold_warning = float(threshold_str) * 1.2
+        except (ValueError, TypeError):
+            continue  # Skip non-numeric thresholds
+
+        # Check Value or Raw Value
+        compare_value = None
+        if value_str not in (None, "-", ""):
+            try:
+                compare_value = float(value_str)
+            except (ValueError, TypeError):
+                pass
+        
+        if compare_value is None:  # Fallback to Raw Value
+            if raw_value_str not in (None, "-", ""):
+                try:
+                    #because here raw value is smaller than thresold in normal state
+                    threshold_caution = threshold_caution * -0.66
+                    threshold_warning = threshold_warning * -0.85
+                    compare_value = float(raw_value_str) * -1
+                except (ValueError, TypeError):
+                    continue  # Skip invalid values
+            else:
+                continue
+
+        # Highlight if value < threshold
+        if compare_value < threshold_caution and compare_value > threshold_warning:
+            raw_value_cell.fill = yellow_fill
+        elif compare_value < threshold_warning:
+            raw_value_cell.fill = orange_fill
 # Function to merge cells for a specific column
 def merge_cells_for_column(ws, col_idx):
     prev_value = None
