@@ -56,9 +56,9 @@ threshold_sata_ssd = {
 } 
 threshold_hdd_sata = {
     "Elements in grown defect list": "799",
-    "Total Uncorrected Errors": "39",
-    "Accumulated start-stop cycles": "8999",
-    "Accumulated load-unload cycles": "269000"
+    "Total Uncorrected Errors": "50",
+    "Accumulated start-stop cycles": "500",
+    "Accumulated load-unload cycles": "3000"
 } 
 threshold_micron_ssd = {
     "Raw_Read_Error_Rate": "50",
@@ -248,10 +248,13 @@ def extract_ssd_parameters(log_content):
 def extract_hdd_parameters(log_content):
     data = []
     disk_blocks = re.findall(r"=== START OF INFORMATION SECTION ===(.*?)(?==== START OF INFORMATION SECTION ===|\Z)", log_content, re.DOTALL)
-    
+    capacity_match = re.search(r"User Capacity:\s+\d{1,3}(?:,\d{3})*\s+bytes\s+\[(\d+)\.\d+\s+TB\]", log_content)
+    if capacity_match:
+        tb_value = capacity_match.group(1)
+    is_sata = re.search(r'\bSATA\b', log_content, re.IGNORECASE) 
     for block in disk_blocks:
         is_hdd = re.search(r"Rotation Rate:\s+\d+ rpm", block, re.IGNORECASE)
-        if is_hdd:
+        if is_hdd and not is_sata:
             serial_match = re.search(r"Serial Number:\s+(\S+)", block, re.IGNORECASE)
             serial_number = serial_match.group(1) if serial_match else "Unknown"
 
@@ -312,6 +315,85 @@ def extract_hdd_parameters(log_content):
                         "Raw Value": raw_value
                     })
             # Add an empty row after each disk's data
+            data.append({
+                "Brand": "",
+                "Device Model": "",
+                "Serial Number": "",
+                "Parameter": "",
+                "Value": "",
+                "Raw Value": ""
+            })
+        else:
+            # --- SATA HDD extraction ---
+            # smart_pattern should be defined elsewhere to extract tuples:
+            # (attr_id, attr_name, value, raw_value)
+            smart_matches = smart_pattern.findall(block) 
+            total_lba_written = None  # To store Total_LBAs_Written when found    
+            serial_match = re.search(r"Serial Number:\s+(\S+)", block, re.IGNORECASE)
+            serial_number = serial_match.group(1) if serial_match else "Unknown"
+
+            model_match =  re.search(r"Device Model:\s+(\S+)", block, re.IGNORECASE)
+            model_match_hp = re.search(r"Product:\s+(\S+)", block, re.IGNORECASE)
+
+            seagate_match =  re.search(r"Vendor:\s+(\S+)", block, re.IGNORECASE)
+            brand = seagate_match.group(1) if seagate_match else "HP"
+            device_model = (
+                    model_match.group(1) if model_match 
+                    else model_match_hp.group(1) if model_match_hp
+                    else "Unknown"
+                    )
+            # Define the list of expected Micron SMART parameters.
+            hdd_sata_params = [
+                "Raw_Read_Error_Rate", 
+                "Spin_Retry_Count", 
+                "Reported_Uncorrect",
+                "Command_Timeout", 
+                "Current_Pending_Sector",
+                "Offline_Uncorrectable",
+                "Multi_Zone_Error_Rate"
+            ]
+            for match in smart_matches:
+                attr_id, attr_name, value, threshold, raw_value = match
+                # Check for the known SATA parameters.
+                if attr_name in hdd_sata_params:
+                    data.append({
+                        "Brand": brand,
+                        "Device Model": device_model,
+                        "Serial Number": serial_number,
+                        "Parameter": attr_name,
+                        "Threshold": threshold,
+                        "Value": value,
+                        "Raw Value": raw_value
+                    })
+                    # Detect Total_LBAs_Written by its attribute ID "241"
+                elif attr_id.strip() == "241":
+                    try:
+                        total_lba_written = int(raw_value)
+                    except ValueError:
+                        total_lba_written = None
+                    data.append({
+                        "Brand": brand,
+                        "Device Model": device_model,
+                        "Serial Number": serial_number,
+                        "Parameter": "Total_LBAs_Written",
+                        "Threshold": threshold,
+                        "Value": value,
+                        "Raw Value": raw_value
+                    })
+                    
+            if total_lba_written is not None:
+                total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024
+                threshold = threshold_micron_ssd.get("Total Size Written (TB)", "-")
+                data.append({
+                    "Brand": brand,
+                    "Device Model": device_model,
+                    "Serial Number": serial_number,
+                    "Parameter": "Total Size Written (TB)",
+                    "Threshold": threshold,
+                    "Value": "-",
+                    "Raw Value": f"{total_size_written_tb:.2f}"
+                    })
+
             data.append({
                 "Brand": "",
                 "Device Model": "",
@@ -698,6 +780,9 @@ def extractor():
         rust_binary = os.path.join(script_dir, "extractor")
     else:
         rust_binary = os.path.join(script_dir, "extractor.exe")
+    if not os.path.isfile(rust_binary):
+        print(f"Error: Extractor binary not found at {rust_binary}")
+        return False  # or raise FileNotFoundError
 
     try:
         subprocess.run([rust_binary], check=True)
@@ -789,7 +874,7 @@ with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
 wb = load_workbook(excel_path)
 yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 orange_fill = PatternFill(start_color="FFA500", end_color="FFFF00", fill_type="solid")
-
+#Colour cells based on thresholds
 if "SMART Data" in wb.sheetnames:
     ws = wb["SMART Data"]
     for row in ws.iter_rows(min_row=2):  # Skip header row (row 1)
@@ -817,6 +902,10 @@ if "SMART Data" in wb.sheetnames:
         if value_str not in (None, "-", ""):
             try:
                 compare_value = float(value_str)
+                #To avoid colouring cells when value is 100
+                if compare_value == 100:
+                    compare_value = 200
+                    
             except (ValueError, TypeError):
                 pass
         
@@ -824,19 +913,20 @@ if "SMART Data" in wb.sheetnames:
             if raw_value_str not in (None, "-", ""):
                 try:
                     #because here raw value is smaller than thresold in normal state
-                    threshold_caution = threshold_caution * -0.66
-                    threshold_warning = threshold_warning * -0.85
+                    threshold_caution = float(threshold_str) * -0.8
+                    threshold_warning = float(threshold_str) * -0.9
                     compare_value = float(raw_value_str) * -1
+                   # print(threshold_warning)
                 except (ValueError, TypeError):
                     continue  # Skip invalid values
             else:
                 continue
 
         # Highlight if value < threshold
-        if compare_value < threshold_caution and compare_value > threshold_warning:
-            raw_value_cell.fill = yellow_fill
-        elif compare_value < threshold_warning:
+        if compare_value <= threshold_warning:
             raw_value_cell.fill = orange_fill
+        elif compare_value <= threshold_caution:
+            raw_value_cell.fill = yellow_fill
 # Function to merge cells for a specific column
 def merge_cells_for_column(ws, col_idx):
     prev_value = None
