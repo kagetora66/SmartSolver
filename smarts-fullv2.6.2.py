@@ -260,14 +260,17 @@ def extract_hdd_parameters(log_content):
 
             model_match =  re.search(r"Device Model:\s+(\S+)", block, re.IGNORECASE)
             model_match_hp = re.search(r"Product:\s+(\S+)", block, re.IGNORECASE)
-
-            seagate_match =  re.search(r"Vendor:\s+(\S+)", block, re.IGNORECASE)
-            brand = seagate_match.group(1) if seagate_match else "HP"
             device_model = (
                     model_match.group(1) if model_match 
                     else model_match_hp.group(1) if model_match_hp
                     else "Unknown"
                     )
+            #seagate_match =  re.search(r"Vendor:\s+(\S+)", block, re.IGNORECASE)
+            if device_model.startswith("ST"):
+                brand = "SEAGATE"
+            else:
+                brand = "HP"
+
   
             elements_grown_defect = re.search(r"Elements in grown defect list:\s+(\d+)", block)
             start_stop_cycles = re.search(r"Accumulated start-stop cycles:\s+(\d+)", block)
@@ -335,13 +338,17 @@ def extract_hdd_parameters(log_content):
             model_match =  re.search(r"Device Model:\s+(\S+)", block, re.IGNORECASE)
             model_match_hp = re.search(r"Product:\s+(\S+)", block, re.IGNORECASE)
 
-            seagate_match =  re.search(r"Vendor:\s+(\S+)", block, re.IGNORECASE)
-            brand = seagate_match.group(1) if seagate_match else "HP"
+            #seagate_match =  re.search(r"Vendor:\s+(\S+)", block, re.IGNORECASE)
+            #brand = seagate_match.group(1) if seagate_match else "HP"
             device_model = (
                     model_match.group(1) if model_match 
                     else model_match_hp.group(1) if model_match_hp
                     else "Unknown"
                     )
+            if device_model.startswith("ST"):
+                brand = "SEAGATE"
+            else:
+                brand = "HP"
             # Define the list of expected Micron SMART parameters.
             hdd_sata_params = [
                 "Raw_Read_Error_Rate", 
@@ -533,32 +540,37 @@ def extract_sysinfo():
             # Extract versions from pmc output
             with open(pmc_file[0], "r") as file:
                 content = file.read()
-                versions = {
+                basic_info = {
                     "SAB ID": re.search(r'hostname\s*:\s*(.*)$', content, re.IGNORECASE | re.MULTILINE), 
                     "SAB Version": re.search(r'#SAB version\s+([^\s]+)', content),
                     "Replication Version": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
                     "Rapidtier Version": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
                     "UI Version": re.search(r'__version__\s*=\s*"([^"]+)"', content),
-                    "CLI Version": re.search(r'CLI Version:\s*([^\s]+)', content)
-                }
+                    "CLI Version": re.search(r'CLI Version:\s*([^\s]+)', content),
+                    "ROC Temperature": re.search(r'ROC temperature(Degree Celsius) =\s*([^\s]+)', content),
+                    "Cache Vault Temperature": re.search(r'Temperature\s*([^\s]+)', content),
+                    "BBU Status": re.search(r'BBU Status =\s*([^\s]+)', content)
+                } 
+
         else:
             # Extract versions from version file
             with open(version_file, "r") as file:
                 content = file.read()
-                versions = {
+                basic_info = {
                     "UI Version": re.search(r'UI Version:\s*([\d.]+)', content),
                     "CLI Version": re.search(r'CLI Version:\s*([\d.]+)', content),
                     "SAB Version": re.search(r'SAB Version:\s*([\d.]+)', content)
                 }
 
             
-        for name, match in versions.items():
+        for name, match in basic_info.items():
             if match:
                 sys_info[name] = match.group(1)
             else:
                 sys_info[name] = "Not Found"
                     
-
+        bbu_value = "Unknown" if sys_info["BBU Status"] is None else sys_info["BBU Status"]
+        sys_info["BBU Status"] = "OK" if bbu_value == "0" else "Not OK"
         # Extract uptime and serial number from SystemInfo.mylinux
         with open(sysinfo_file, "r") as file:
             for line in file:
