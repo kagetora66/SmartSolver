@@ -568,9 +568,9 @@ def extract_sysinfo():
                 sys_info[name] = match.group(1)
             else:
                 sys_info[name] = "Not Found"
-                    
-        bbu_value = "Unknown" if sys_info["BBU Status"] is None else sys_info["BBU Status"]
-        sys_info["BBU Status"] = "OK" if bbu_value == "0" else "Not OK"
+        if "BBU Status" in sys_info:
+           bbu_value = "Unknown" if sys_info["BBU Status"] is None else sys_info["BBU Status"]
+           sys_info["BBU Status"] = "OK" if bbu_value == "0" else "Not OK"
         # Extract uptime and serial number from SystemInfo.mylinux
         with open(sysinfo_file, "r") as file:
             for line in file:
