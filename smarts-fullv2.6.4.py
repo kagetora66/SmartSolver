@@ -1,3 +1,6 @@
+#By Safari, HPDS Tech Support
+#===========ooOoo============
+#
 import re
 import pandas as pd
 from openpyxl import load_workbook
@@ -57,8 +60,8 @@ threshold_sata_ssd = {
 threshold_hdd_sata = {
     "Elements in grown defect list": "799",
     "Total Uncorrected Errors": "50",
-    "Accumulated start-stop cycles": "500",
-    "Accumulated load-unload cycles": "3000"
+    "Accumulated start-stop cycles": "10000",
+    "Accumulated load-unload cycles": "300000"
 } 
 threshold_micron_ssd = {
     "Raw_Read_Error_Rate": "50",
@@ -251,14 +254,15 @@ def extract_hdd_parameters(log_content):
     capacity_match = re.search(r"User Capacity:\s+\d{1,3}(?:,\d{3})*\s+bytes\s+\[(\d+)\.\d+\s+TB\]", log_content)
     if capacity_match:
         tb_value = capacity_match.group(1)
-    is_sata = re.search(r'\bSATA\b', log_content, re.IGNORECASE) 
     for block in disk_blocks:
+
+        is_sata = re.search(r'\bSATA\b', block, re.IGNORECASE)         
         is_hdd = re.search(r"Rotation Rate:\s+\d+ rpm", block, re.IGNORECASE)
         if is_hdd and not is_sata:
             serial_match = re.search(r"Serial Number:\s+(\S+)", block, re.IGNORECASE)
             serial_number = serial_match.group(1) if serial_match else "Unknown"
 
-            model_match =  re.search(r"Device Model:\s+(\S+)", block, re.IGNORECASE)
+            model_match =  re.search(r"Device Model:\s+(.*?)\s*$", block, re.IGNORECASE)
             model_match_hp = re.search(r"Product:\s+(\S+)", block, re.IGNORECASE)
             device_model = (
                     model_match.group(1) if model_match 
@@ -268,8 +272,8 @@ def extract_hdd_parameters(log_content):
             #seagate_match =  re.search(r"Vendor:\s+(\S+)", block, re.IGNORECASE)
             if device_model.startswith("ST"):
                 brand = "SEAGATE"
-            else:
-                brand = "HP"
+            elif device_model.startswith("TOSHIBA"):
+                brand = "Toshiba"
 
   
             elements_grown_defect = re.search(r"Elements in grown defect list:\s+(\d+)", block)
@@ -326,7 +330,7 @@ def extract_hdd_parameters(log_content):
                 "Value": "",
                 "Raw Value": ""
             })
-        else:
+        elif is_hdd and is_sata:
             # --- SATA HDD extraction ---
             # smart_pattern should be defined elsewhere to extract tuples:
             # (attr_id, attr_name, value, raw_value)
@@ -335,7 +339,7 @@ def extract_hdd_parameters(log_content):
             serial_match = re.search(r"Serial Number:\s+(\S+)", block, re.IGNORECASE)
             serial_number = serial_match.group(1) if serial_match else "Unknown"
 
-            model_match =  re.search(r"Device Model:\s+(\S+)", block, re.IGNORECASE)
+            model_match = re.search(r"Device Model:\s+(.*?)\s*$", block, re.IGNORECASE | re.MULTILINE)
             model_match_hp = re.search(r"Product:\s+(\S+)", block, re.IGNORECASE)
 
             #seagate_match =  re.search(r"Vendor:\s+(\S+)", block, re.IGNORECASE)
@@ -347,8 +351,8 @@ def extract_hdd_parameters(log_content):
                     )
             if device_model.startswith("ST"):
                 brand = "SEAGATE"
-            else:
-                brand = "HP"
+            elif device_model.startswith("TOSHIBA"):
+                brand = "Toshiba"
             # Define the list of expected Micron SMART parameters.
             hdd_sata_params = [
                 "Raw_Read_Error_Rate", 
@@ -599,21 +603,22 @@ def extract_sysinfo():
 
 # Function to extract host information from SCST configuration
 def extract_host_info():
-    
     scst_dir = "./SCST"
     db_dir = "./Database"
-    #Checks for new scst file inside script directory
+    # Checks for new scst file inside script directory
     new_scst_matches = glob.glob(os.path.join(script_dir, "scst.*"))
     if new_scst_matches:
         scst_files = new_scst_matches[0]
         input_file = scst_files
     else:
         scst_files = sorted(glob.glob(os.path.join(scst_dir, "scst_20*.conf")), reverse=True)
-        input_file = scst_files[0]
-    if not scst_files:
+        input_file = scst_files[0] if scst_files else None
+    
+    if not input_file:
         print("Error: No 'scst_*.conf' files found in /SCST directory.")
         return []
-    #Checks for output.txt file inside script directory 
+
+    # Checks for output.txt file inside script directory 
     is_pmc = os.path.isfile(os.path.join(os.path.dirname(__file__), 'output.txt'))
     print(f"[DEBUG] SCST file used: {input_file}")
     if is_pmc:
@@ -623,21 +628,19 @@ def extract_host_info():
         current_wwn = None
         with open(pmc_output, "r") as file:
             lines = file.readlines()
-        #We map port connection to wwn addresses 
+        # We map port connection to wwn addresses 
         for line in lines:
             line = line.strip()
             if line.lower().startswith("wwn = 0x"):
                 hex_str = line.split('=')[1].strip().lower().replace('0x', '')
                 current_wwn = ':'.join(hex_str[i:i+2] for i in range(0, len(hex_str), 2))
             elif ('Point' in line or 'NPort' in line) and current_wwn:
-                if 'Point' in line:
-                    port_type = "Point to Point"
-                else:
-                    port_type = "SAN Switch"
+                port_type = "Point to Point" if 'Point' in line else "SAN Switch"
                 target_port_type[current_wwn] = port_type
                 current_wwn = None
     else:
         target_port_type = {}
+
     try:
         with open(input_file, "r") as file:
             lines = file.readlines()
@@ -674,6 +677,9 @@ def extract_host_info():
             groups = re.findall(r"GROUP\s+([\w-]+)\s*\{([\s\S]*?)\}", target_body)
 
             for group_name, group_content in groups:
+                # Handle empty Access Control
+                access_control = group_name if group_name else "-"
+                
                 luns = re.findall(r"LUN\s+(\d+)\s+([\w_]+)", group_content)
                 initiators = re.findall(r"INITIATOR\s+([0-9a-fA-F:]+)", group_content)
 
@@ -683,28 +689,28 @@ def extract_host_info():
                 sab_db_file = os.path.join(db_dir, "sab.db")
                 host_map = {}
 
-                with sqlite3.connect(sab_db_file) as conn:
-                    cursor = conn.cursor()
-
-                    for initiator in unique_initiators:
-                        cursor.execute("""
-                            SELECT initiator_name, to_host_id 
-                            FROM hostinitiators
-                            WHERE initiator_name = ?
-                        """, (initiator,))
-                        to_host_row = cursor.fetchone()
-
-                        if to_host_row:
-                            to_host_id = to_host_row[1]
+                if os.path.exists(sab_db_file):
+                    with sqlite3.connect(sab_db_file) as conn:
+                        cursor = conn.cursor()
+                        for initiator in unique_initiators:
                             cursor.execute("""
-                                SELECT NAME 
-                                FROM host
-                                WHERE ID = ?
-                            """, (to_host_id,))
-                            host_row = cursor.fetchone()
-                            host_map[initiator] = host_row[0] if host_row else "Not Found"
-                        else:
-                            host_map[initiator] = "Not Found"
+                                SELECT initiator_name, to_host_id 
+                                FROM hostinitiators
+                                WHERE initiator_name = ?
+                            """, (initiator,))
+                            to_host_row = cursor.fetchone()
+
+                            if to_host_row:
+                                to_host_id = to_host_row[1]
+                                cursor.execute("""
+                                    SELECT NAME 
+                                    FROM host
+                                    WHERE ID = ?
+                                """, (to_host_id,))
+                                host_row = cursor.fetchone()
+                                host_map[initiator] = host_row[0] if host_row else "Not Found"
+                            else:
+                                host_map[initiator] = "Not Found"
 
                 # Group initiators and LUNs by host
                 host_luns_initiators = {}
@@ -722,53 +728,55 @@ def extract_host_info():
                     host_luns_initiators[host_name]["target_map"][initiator] = target_address
 
                 for host_name, data in host_luns_initiators.items():
+                    host_name = host_name if host_name else "-"
                     for initiator in sorted(data["initiators"]):
-                        target = data["target_map"].get(initiator, "")
-                        if target_port_type:
-                            port_type = target_port_type.get(target, "")
-                        else:
-                            port_type = "-"
+                        initiator = initiator if initiator else "-"
+                        target = data["target_map"].get(initiator, "-")
+                        port_type = target_port_type.get(target, "-") if target_port_type else "-"
+                        
                         if not data["luns"]:
                             host_data.append({
-                                "Access Control": group_name,
+                                "Access Control": access_control,
                                 "Host": host_name,
-                                "LUNs": "",
+                                "LUNs": "-",
                                 "Initiator Addresses": initiator,
                                 "Target Address": target,
-                                "Connection Type" : port_type
+                                "Connection Type": port_type
                             })
                         else:
                             for lun in sorted(data["luns"]):
                                 host_data.append({
-                                    "Access Control": group_name,
+                                    "Access Control": access_control,
                                     "Host": host_name,
                                     "LUNs": lun,
                                     "Initiator Addresses": initiator,
                                     "Target Address": target,
                                     "Connection Type": port_type
                                 })
+
         if not host_data:
             if target_port_type:
                 for target, port_type in target_port_type.items():
                     host_data.append({
-                        "Access Control": groups,
-                        "Host": "",
-                        "LUNs": "",
-                        "Initiator Addresses": "",
-                        "Target Addresses": target,
+                        "Access Control": "-",
+                        "Host": "-",
+                        "LUNs": "-",
+                        "Initiator Addresses": "-",
+                        "Target Address": target,
                         "Connection Type": port_type
-                        })
+                    })
             else:
-                    host_data.append({
-                        "Access Control": groups,
-                        "Host": "",
-                        "LUNs": "",
-                        "Initiator Addresses": "",
-                        "Target Addresses": "",
-                        "Connection Type": ""
-                        })
+                host_data.append({
+                    "Access Control": "-",
+                    "Host": "-",
+                    "LUNs": "-",
+                    "Initiator Addresses": "-",
+                    "Target Address": "-",
+                    "Connection Type": "-"
+                })
 
         return host_data
+
 
     except Exception as e:
         print(f"[ERROR] extract_host_info failed: {e}")
