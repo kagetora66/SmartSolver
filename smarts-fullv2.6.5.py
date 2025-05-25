@@ -127,7 +127,7 @@ def extract_ssd_parameters(log_content):
                         raw_value = match.group(1)
                     else:
                         continue
-                    threshold = threshold_sam_ssd.get(param, "-")
+                    threshold = threshold_sas_ssd.get(param, "-")
                     data.append({
                         "Brand" : brand,
                         "Device Model": device_model, 
