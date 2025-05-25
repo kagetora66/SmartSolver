@@ -27,17 +27,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let log_path = PathBuf::from(cleanup_log);
     extracted_files.push(log_path);
+    let (tx, rx) = std::sync::mpsc::channel();
+
     let handle = std::thread::spawn(move || {
-        println!("Cleanup Process:");  // DEBUG
-        wait_for_signal_and_cleanup(extracted_files)
+        println!("Cleanup thread started");
+        let result = wait_for_signal_and_cleanup(extracted_files);
+        tx.send(result).expect("Failed to send cleanup status");
     });
 
-    // Keep main thread alive indefinitely
-    loop {
-        std::thread::sleep(Duration::from_secs(60));
+    // Wait for cleanup completion or timeout
+    match rx.recv_timeout(Duration::from_secs(300)) { // 5-minute timeout
+        Ok(result) => {
+            handle.join().unwrap();
+            result?;
+            println!("Cleanup complete - exiting");
+        }
+        Err(_) => {
+            eprintln!("Cleanup timeout reached");
+            std::process::exit(1);
+        }
     }
-    
-    // handle.join().unwrap()?;  // Alternative: wait for thread
+
+    Ok(())
 }
 fn find_zip_file() -> Result<PathBuf, Box<dyn std::error::Error>> {
     for entry in std::fs::read_dir(".")? {
@@ -133,13 +144,25 @@ fn sanitize_windows_path(path: &Path) -> PathBuf {
     sanitized
 }
 fn wait_for_signal_and_cleanup(extracted_files: Vec<PathBuf>) -> io::Result<()> {
-    //println!("[Rust] Waiting for Python signal...");
-    
+    let base_dir = std::env::current_dir()?;
+    let python_done = base_dir.join("python_done.flag");
+    let user_confirm = base_dir.join("delete_confirmed.flag");
+    let user_cancel = base_dir.join("delete_cancelled.flag");
+
+    //println!("[Rust] Waiting for two signals:");
+    //println!("1. Python completion (python_done.flag)");
+    //println!("2. User confirmation (delete_confirmed.flag)");
+
+    // Wait for Python to finish first
+    while !python_done.exists() {
+        thread::sleep(Duration::from_secs(1));
+    }
+    println!("SmartSolver Finished");
+
+    // Then wait for user decision
     loop {
-        // Check for confirmation file
-        if Path::new("delete_confirmed.flag").exists() {
-            println!("User confirmed deletion");
-            // Perform cleanup
+        if user_confirm.exists() {
+            println!("Starting cleanup...");
             for path in extracted_files {
                 if path.exists() {
                     if path.is_dir() {
@@ -149,18 +172,19 @@ fn wait_for_signal_and_cleanup(extracted_files: Vec<PathBuf>) -> io::Result<()> 
                     }
                 }
             }
-            fs::remove_file("delete_confirmed.flag")?;
+            fs::remove_file(&user_confirm)?;
+            fs::remove_file(&python_done)?;
             break;
         }
-        // Check for cancellation file
-        else if Path::new("delete_cancelled.flag").exists() {
-            println!("User cancelled deletion");
-            fs::remove_file("delete_cancelled.flag")?;
+        else if user_cancel.exists() {
+            println!("Cleanup cancelled by user");
+            fs::remove_file(&user_cancel)?;
+            fs::remove_file(&python_done)?;
             break;
         }
         thread::sleep(Duration::from_secs(1));
     }
-    
+
     Ok(())
 }
 

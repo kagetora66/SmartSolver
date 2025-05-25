@@ -812,7 +812,7 @@ def extractor():
         print("Processing extracted files...")
         time.sleep(5)  # Replace with actual work
         while True:
-            response = input("Delete extracted files? (y/n): ").lower()
+            response = input("Delete extracted files after finishing? (y/n): ").lower()
             if response in ['y', 'n']:
                 break
             print("Please enter 'y' or 'n'")
@@ -1008,3 +1008,4 @@ if "Host Info" in wb.sheetnames:
     merge_cells_for_column(host_info_sheet, 6)  # Merge "Connection type" column (column 6) 
 wb.save(excel_path)
 print("SMART data, device info, and host info extracted and written to smart_data.xlsx with proper formatting.")
+Path("python_done.flag").touch()
