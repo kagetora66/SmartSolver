@@ -1,27 +1,44 @@
-use std::fs::File;
+use std::fs::{self, File};
+use std::io::Write;
 use std::io;
 use std::path::{Path, PathBuf};
 use zip::ZipArchive;
-
+use std::thread;
+use std::time::Duration;
+use std::io::BufRead;
+use std::sync::mpsc;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Extract main password-protected zip
+    // Extract files
     let zip_path = find_zip_file()?;
-    println!("Found main zip file: {}", zip_path.display());
-
     let password = rpassword::prompt_password("Enter password: ")?;
-    extract_zip(&zip_path, Some(&password))?;
+    let mut extracted_files = extract_zip(&zip_path, Some(&password))?;
 
-    // Find and extract additional zips
     let other_zips = find_other_zips()?;
     for zip in other_zips {
-        println!("Found additional zip: {}", zip.display());
-        extract_zip(&zip, None)?;
+        let mut new_files = extract_zip(&zip, None)?;
+        extracted_files.append(&mut new_files);
     }
 
-    println!("All extractions completed!");
-    Ok(())
-}
+    // Write paths to cleanup log
+    let cleanup_log = "extracted_files.log";
+    let mut log = File::create(cleanup_log)?;
+    for path in &extracted_files {
+        writeln!(log, "{}", path.display())?;
+    }
+    let log_path = PathBuf::from(cleanup_log);
+    extracted_files.push(log_path);
+    let handle = std::thread::spawn(move || {
+        println!("Cleanup Process:");  // DEBUG
+        wait_for_signal_and_cleanup(extracted_files)
+    });
 
+    // Keep main thread alive indefinitely
+    loop {
+        std::thread::sleep(Duration::from_secs(60));
+    }
+    
+    // handle.join().unwrap()?;  // Alternative: wait for thread
+}
 fn find_zip_file() -> Result<PathBuf, Box<dyn std::error::Error>> {
     for entry in std::fs::read_dir(".")? {
         let entry = entry?;
@@ -53,9 +70,13 @@ fn find_other_zips() -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
     Ok(zips)
 }
 
-fn extract_zip(zip_path: &Path, password: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn extract_zip(
+    zip_path: &Path,
+    password: Option<&str>,
+) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
     let file = File::open(zip_path)?;
     let mut archive = ZipArchive::new(file)?;
+    let mut extracted_paths = Vec::new();
 
     // Verify password if provided
     if let Some(pwd) = password {
@@ -77,23 +98,25 @@ fn extract_zip(zip_path: &Path, password: Option<&str>) -> Result<(), Box<dyn st
             None => archive.by_index(i)?,
         };
 
-        // Windows-safe path handling
         let outpath = sanitize_windows_path(&file.mangled_name());
+        extracted_paths.push(outpath.clone());
+
         if file.is_dir() {
             std::fs::create_dir_all(&outpath)?;
         } else {
             if let Some(parent) = outpath.parent() {
                 if !parent.exists() {
                     std::fs::create_dir_all(parent)?;
+                    extracted_paths.push(parent.to_path_buf());
                 }
             }
             let mut outfile = File::create(&outpath)?;
             io::copy(&mut file, &mut outfile)?;
         }
     }
-    Ok(())
-}
 
+    Ok(extracted_paths)
+}
 fn sanitize_windows_path(path: &Path) -> PathBuf {
     let mut sanitized = PathBuf::new();
     for component in path.components() {
@@ -109,3 +132,35 @@ fn sanitize_windows_path(path: &Path) -> PathBuf {
     }
     sanitized
 }
+fn wait_for_signal_and_cleanup(extracted_files: Vec<PathBuf>) -> io::Result<()> {
+    //println!("[Rust] Waiting for Python signal...");
+    
+    loop {
+        // Check for confirmation file
+        if Path::new("delete_confirmed.flag").exists() {
+            println!("User confirmed deletion");
+            // Perform cleanup
+            for path in extracted_files {
+                if path.exists() {
+                    if path.is_dir() {
+                        fs::remove_dir_all(&path)?;
+                    } else {
+                        fs::remove_file(&path)?;
+                    }
+                }
+            }
+            fs::remove_file("delete_confirmed.flag")?;
+            break;
+        }
+        // Check for cancellation file
+        else if Path::new("delete_cancelled.flag").exists() {
+            println!("User cancelled deletion");
+            fs::remove_file("delete_cancelled.flag")?;
+            break;
+        }
+        thread::sleep(Duration::from_secs(1));
+    }
+    
+    Ok(())
+}
+

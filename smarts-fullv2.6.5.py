@@ -14,6 +14,8 @@ import getpass
 from zipfile import ZipFile
 import subprocess
 from openpyxl.styles import PatternFill
+from pathlib import Path
+import time
 # Define required parameters
 ssd_params = [
     "Reallocated_Sector_Ct",
@@ -796,20 +798,35 @@ def extract_host_info():
 #Extracts full_log using a RUST program
 def extractor():
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    if os.name == 'posix':
-        rust_binary = os.path.join(script_dir, "extractor")
-    else:
-        rust_binary = os.path.join(script_dir, "extractor.exe")
+    rust_binary = os.path.join(script_dir, "extractor.exe" if os.name == "nt" else "extractor")
+    
     if not os.path.isfile(rust_binary):
-        print(f"Error: Extractor binary not found at {rust_binary}")
-        return False  # or raise FileNotFoundError
+        raise FileNotFoundError(f"Extractor binary not found at {rust_binary}")
 
     try:
-        subprocess.run([rust_binary], check=True)
+        # Launch Rust binary (non-blocking)
+        subprocess.Popen([rust_binary])
+        print("Rust extractor started in background.")
+        
+        # Simulate work with extracted files
+        print("Processing extracted files...")
+        time.sleep(5)  # Replace with actual work
+        while True:
+            response = input("Delete extracted files? (y/n): ").lower()
+            if response in ['y', 'n']:
+                break
+            print("Please enter 'y' or 'n'")
+        
+        # Create appropriate signal file
+        signal_file = "delete_confirmed.flag" if response == 'y' else "delete_cancelled.flag"
+        Path(signal_file).touch()
+
+        
     except subprocess.CalledProcessError as e:
-        print(f"Rust extractor failed: {e}")
-script_dir = os.path.dirname(os.path.abspath(__file__))
+        print(f"[Python] Rust extractor failed: {e}")
+        return False
 #Extract files
+script_dir = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isfile(os.path.join(script_dir, 'version')):
     extractor()
 # Path to the smarts.mylinux file in the /SystemOverallInfo directory
