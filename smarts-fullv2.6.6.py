@@ -91,7 +91,10 @@ def extract_ssd_parameters(log_content):
         is_ssd = not re.search(r"Rotation Rate:\s+\d+ rpm", block, re.IGNORECASE)
         is_sas_ssd = re.search(r"Transport protocol:\s+SAS", block, re.IGNORECASE)
         is_micron_ssd = re.search(r"Device Model:\s+Micron", block, re.IGNORECASE)
-        
+        disk_type = ""
+        capacity_match = re.search(r"\[([^\]]+)\]", block)
+        if capacity_match:
+            tb_value = capacity_match.group(1) 
         if is_ssd:
             serial_match = re.search(r"Serial Number:\s+(\S+)", block, re.IGNORECASE)
             serial_number = serial_match.group(1) if serial_match else "Unknown"
@@ -108,7 +111,7 @@ def extract_ssd_parameters(log_content):
                 model_match_sas = re.search(r"Product:\s+(\S+)", block, re.IGNORECASE)
                 device_model = model_match_sas.group(1) if model_match_sas else "Unknown" 
                 brand = "Samsung"
-
+                disk_type = "SSD SAS"
                 read_error_value = int(read_error_match.group(1)) if read_error_match else 0
                 write_error_value = int(write_error_match.group(1)) if write_error_match else 0
                 total_uncorrected_errors = read_error_value + write_error_value
@@ -132,6 +135,8 @@ def extract_ssd_parameters(log_content):
                         "Brand" : brand,
                         "Device Model": device_model, 
                         "Serial Number": serial_number,
+                        "Interface": disk_type,
+                        "Size": tb_value,
                         "Parameter": param,
                         "Threshold" : threshold,
                         "Value": "-",
@@ -144,7 +149,7 @@ def extract_ssd_parameters(log_content):
                 # (attr_id, attr_name, value, raw_value)
                 smart_matches = smart_pattern.findall(block)
                 total_lba_written = None  # To store Total_LBAs_Written when found
-                
+                disk_type = "SSD SATA"
                 if is_micron_ssd:
                     brand = "Micron"
                     # Define the list of expected Micron SMART parameters.
@@ -164,6 +169,8 @@ def extract_ssd_parameters(log_content):
                                 "Brand": brand,
                                 "Device Model": device_model,
                                 "Serial Number": serial_number,
+                                "Interface": disk_type,
+                                "Size": tb_value,
                                 "Parameter": attr_name,
                                 "Threshold": threshold,
                                 "Value": value,
@@ -179,6 +186,8 @@ def extract_ssd_parameters(log_content):
                                 "Brand": brand,
                                 "Device Model": device_model,
                                 "Serial Number": serial_number,
+                                "Interface": disk_type,
+                                "Size": tb_value,
                                 "Parameter": "Total_LBAs_Written",
                                 "Threshold": threshold,
                                 "Value": value,
@@ -192,6 +201,8 @@ def extract_ssd_parameters(log_content):
                             "Brand": brand,
                             "Device Model": device_model,
                             "Serial Number": serial_number,
+                            "Interface": disk_type,
+                            "Size": tb_value,
                             "Parameter": "Total Size Written (TB)",
                             "Threshold": threshold,
                             "Value": "-",
@@ -199,6 +210,7 @@ def extract_ssd_parameters(log_content):
                         })
                 else:
                     brand = "SAMSUNG"
+                    disk_type = "SSD SATA"
                     # Existing logic for non-Micron SATA SSDs
                     for match in smart_matches:
                         attr_id, attr_name, value, threshold, raw_value = match
@@ -212,6 +224,8 @@ def extract_ssd_parameters(log_content):
                                 "Brand": brand,
                                 "Device Model": device_model,
                                 "Serial Number": serial_number,
+                                "Interface": disk_type,
+                                "Size": tb_value,
                                 "Parameter": attr_name,
                                 "Threshold": threshold,
                                 "Value": value,
@@ -224,6 +238,8 @@ def extract_ssd_parameters(log_content):
                             "Brand": brand,
                             "Device Model": device_model,
                             "Serial Number": serial_number,
+                            "Interface": disk_type,
+                            "Size": tb_value,
                             "Parameter": "Total Size Written (TB)",
                             "Threshold": threshold,
                             "Value": "-",
@@ -253,17 +269,16 @@ def extract_ssd_parameters(log_content):
 def extract_hdd_parameters(log_content):
     data = []
     disk_blocks = re.findall(r"=== START OF INFORMATION SECTION ===(.*?)(?==== START OF INFORMATION SECTION ===|\Z)", log_content, re.DOTALL)
-    capacity_match = re.search(r"User Capacity:\s+\d{1,3}(?:,\d{3})*\s+bytes\s+\[(\d+)\.\d+\s+TB\]", log_content)
-    if capacity_match:
-        tb_value = capacity_match.group(1)
     for block in disk_blocks:
-
+        capacity_match = re.search(r"\[([^\]]+)\]", block)
+        if capacity_match:
+            tb_value = capacity_match.group(1) 
         is_sata = re.search(r'\bSATA\b', block, re.IGNORECASE)         
         is_hdd = re.search(r"Rotation Rate:\s+\d+ rpm", block, re.IGNORECASE)
         if is_hdd and not is_sata:
             serial_match = re.search(r"Serial Number:\s+(\S+)", block, re.IGNORECASE)
             serial_number = serial_match.group(1) if serial_match else "Unknown"
-
+            disk_type = "HDD SAS"
             model_match =  re.search(r"Device Model:\s+(.*?)\s*$", block, re.IGNORECASE)
             model_match_hp = re.search(r"Product:\s+(\S+)", block, re.IGNORECASE)
             device_model = (
@@ -306,6 +321,8 @@ def extract_hdd_parameters(log_content):
                         "Brand": brand,
                         "Device Model": device_model,
                         "Serial Number": serial_number,
+                        "Interface": disk_type,
+                        "Size": tb_value,
                         "Parameter": param,
                         "Threshold": threshold,
                         "Value": "-",
@@ -318,6 +335,8 @@ def extract_hdd_parameters(log_content):
                         "Brand": brand,
                         "Device Model": device_model,
                         "Serial Number": serial_number,
+                        "Interface": disk_type,
+                        "Size": tb_value,
                         "Parameter": param,
                         "Threshold": threshold,
                         "Value": "-",
@@ -340,7 +359,7 @@ def extract_hdd_parameters(log_content):
             total_lba_written = None  # To store Total_LBAs_Written when found    
             serial_match = re.search(r"Serial Number:\s+(\S+)", block, re.IGNORECASE)
             serial_number = serial_match.group(1) if serial_match else "Unknown"
-
+            disk_type = "HDD SATA"
             model_match = re.search(r"Device Model:\s+(.*?)\s*$", block, re.IGNORECASE | re.MULTILINE)
             model_match_hp = re.search(r"Product:\s+(\S+)", block, re.IGNORECASE)
 
@@ -373,6 +392,8 @@ def extract_hdd_parameters(log_content):
                         "Brand": brand,
                         "Device Model": device_model,
                         "Serial Number": serial_number,
+                        "Interface": disk_type,
+                        "Size": tb_value,
                         "Parameter": attr_name,
                         "Threshold": threshold,
                         "Value": value,
@@ -388,6 +409,8 @@ def extract_hdd_parameters(log_content):
                         "Brand": brand,
                         "Device Model": device_model,
                         "Serial Number": serial_number,
+                        "Interface": disk_type,
+                        "Size": tb_value,
                         "Parameter": "Total_LBAs_Written",
                         "Threshold": threshold,
                         "Value": value,
@@ -401,6 +424,8 @@ def extract_hdd_parameters(log_content):
                     "Brand": brand,
                     "Device Model": device_model,
                     "Serial Number": serial_number,
+                    "Interface": disk_type,
+                    "Size": tb_value,
                     "Parameter": "Total Size Written (TB)",
                     "Threshold": threshold,
                     "Value": "-",
@@ -993,12 +1018,10 @@ def adjust_column_widths(ws):
 # Format all sheets except "Device Info"
 for sheet_name in wb.sheetnames:
     ws = wb[sheet_name]
-    if sheet_name != "Device Info":  # Skip merging for "Device Info" sheet
-        merge_cells_for_column(ws, 1)  # Merge "Enclosure/Slot" column (column 1)
-        merge_cells_for_column(ws, 3)  # Merge "Serial Number" column (column 2)
-        merge_cells_for_column(ws, 4)  # Merge "Device Model" column (column 4)
-        merge_cells_for_column(ws, 2)  # Merge "Brand" column (column 2)
-        for column in range(9,14):
+    if sheet_name != "Device Info":# Skip merging for "Device Info" sheet
+        for column in range(1,7):
+            merge_cells_for_column(ws, column)
+        for column in range(11,16):
             merge_cells_for_column(ws, column)
     adjust_column_widths(ws)  # Adjust column widths for all sheets
 if "Host Info" in wb.sheetnames: 
