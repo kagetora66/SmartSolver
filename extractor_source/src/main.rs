@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let zip_path = find_zip_file()?;
     let password = rpassword::prompt_password("Enter password: ")?;
     let mut extracted_files = extract_zip(&zip_path, Some(&password))?;
-
+    
     let other_zips = find_other_zips()?;
     for zip in other_zips {
         let mut new_files = extract_zip(&zip, None)?;
@@ -30,7 +30,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (tx, rx) = std::sync::mpsc::channel();
 
     let handle = std::thread::spawn(move || {
-        println!("Cleanup thread started");
         let result = wait_for_signal_and_cleanup(extracted_files);
         tx.send(result).expect("Failed to send cleanup status");
     });
@@ -78,6 +77,7 @@ fn find_other_zips() -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
             }
         }
     }
+
     Ok(zips)
 }
 
@@ -88,7 +88,6 @@ pub fn extract_zip(
     let file = File::open(zip_path)?;
     let mut archive = ZipArchive::new(file)?;
     let mut extracted_paths = Vec::new();
-
     // Verify password if provided
     if let Some(pwd) = password {
         let test_file = archive.by_index_decrypt(0, pwd.as_bytes());
@@ -125,7 +124,16 @@ pub fn extract_zip(
             io::copy(&mut file, &mut outfile)?;
         }
     }
-
+    //extraction confirmation
+    if !zip_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .contains("full_log")
+    {
+        let _ = File::create("extracted_confirm")?;
+    }
+    
     Ok(extracted_paths)
 }
 fn sanitize_windows_path(path: &Path) -> PathBuf {
@@ -148,7 +156,7 @@ fn wait_for_signal_and_cleanup(extracted_files: Vec<PathBuf>) -> io::Result<()> 
     let python_done = base_dir.join("python_done.flag");
     let user_confirm = base_dir.join("delete_confirmed.flag");
     let user_cancel = base_dir.join("delete_cancelled.flag");
-
+    let confirm = base_dir.join("extracted_confirm");
     //println!("[Rust] Waiting for two signals:");
     //println!("1. Python completion (python_done.flag)");
     //println!("2. User confirmation (delete_confirmed.flag)");
@@ -158,28 +166,31 @@ fn wait_for_signal_and_cleanup(extracted_files: Vec<PathBuf>) -> io::Result<()> 
         thread::sleep(Duration::from_secs(1));
     }
     println!("SmartSolver Finished");
-
+    let mut paths = extracted_files;
+    paths.sort_by_key(|p| -(p.components().count() as isize));
     // Then wait for user decision
     loop {
         if user_confirm.exists() {
             println!("Starting cleanup...");
-            for path in extracted_files {
-                if path.exists() {
-                    if path.is_dir() {
-                        fs::remove_dir_all(&path)?;
-                    } else {
-                        fs::remove_file(&path)?;
-                    }
+           for path in paths {
+            if path.exists() {
+                if path.is_dir() {
+                    fs::remove_dir_all(&path)?;
+                } else {
+                    fs::remove_file(&path)?;
                 }
             }
+        }
             fs::remove_file(&user_confirm)?;
             fs::remove_file(&python_done)?;
+            fs::remove_file(&confirm)?;            
             break;
         }
         else if user_cancel.exists() {
             println!("Cleanup cancelled by user");
             fs::remove_file(&user_cancel)?;
             fs::remove_file(&python_done)?;
+            fs::remove_file(&confirm)?;            
             break;
         }
         thread::sleep(Duration::from_secs(1));
