@@ -60,12 +60,7 @@ threshold_sata_ssd = {
     "Hardware_ECC_Recovered": "100",
     "Total Size Written (TB)": "6400"
 } 
-threshold_hdd_sata = {
-    "Elements in grown defect list": "799",
-    "Total Uncorrected Errors": "50",
-    "Accumulated start-stop cycles": "10000",
-    "Accumulated load-unload cycles": "300000"
-} 
+
 threshold_micron_ssd = {
     "Raw_Read_Error_Rate": "50",
     "Reallocated_Sector_Ct": "1",
@@ -273,10 +268,21 @@ def extract_hdd_parameters(log_content):
     for block in disk_blocks:
         capacity_match = re.search(r"\[([^\]]+)\]", block)
         if capacity_match:
-            tb_value = capacity_match.group(1) 
+            tb_value = capacity_match.group(1)
+        user_capacity = float(re.search(r'\d+(?:\.\d+)?', tb_value).group()) if re.search(r'\d+(?:\.\d+)?', tb_value) else 0
+        total_uncorrrected_threshold = int(user_capacity)  * 5
+        Element_in_defect_threshold = int(user_capacity)  * 100
+        #We convert to str again for consistency
+        threshold_hdd_sata = {
+                "Elements in grown defect list": str(Element_in_defect_threshold),
+                "Total Uncorrected Errors": str(total_uncorrrected_threshold),
+                "Accumulated start-stop cycles": "10000",
+                "Accumulated load-unload cycles": "300000"
+                }
         is_sata = re.search(r'\bSATA\b', block, re.IGNORECASE)         
         is_hdd = re.search(r"Rotation Rate:\s+\d+ rpm", block, re.IGNORECASE)
         if is_hdd and not is_sata:
+
             serial_match = re.search(r"Serial Number:\s+(\S+)", block, re.IGNORECASE)
             serial_number = serial_match.group(1) if serial_match else "Unknown"
             disk_type = "HDD SAS"
@@ -577,7 +583,7 @@ def extract_sysinfo():
                     "SAB Version": re.search(r'#SAB version\s+([^\s]+)', content),
                     "Replication Version": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
                     "Rapidtier Version": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
-                    "UI Version": re.search(r'__version__\s*=\s*"([^"]+)"', content),
+                    "UI Version": re.search(r'version\s*=\s*"([^"]+)"', content),
                     "CLI Version": re.search(r'CLI Version:\s*([^\s]+)', content),
                     "ROC Temp": re.search(r'ROC temperature.*\(Degree Celsius\)\s*=\s*([^\s]+)', content),
                     "CV Temp": re.search(r'Temperature\s*([^\s]+)', content),
@@ -885,11 +891,11 @@ def extract_slot_port_info():
                 wwn_formatted = ":".join(wwn[i:i+2] for i in range(0, len(wwn), 2))
                 slot_data[current_slot]['ports'][current_port]['wwn'] = wwn_formatted
             elif line.startswith("port_type"):
-                port_type = line.split("=", 1)[1].strip().lower()
-                if "nport" in port_type:
+                port_type = line.split("=", 1)[1].strip()
+                if "NPort" in port_type:
                     slot_data[current_slot]['ports'][current_port]['connection_type'] = "SAN-Switch"
                 else:
-                    slot_data[current_slot]['ports'][current_port]['connection_type'] = "Direct"
+                    slot_data[current_slot]['ports'][current_port]['connection_type'] = "Point-to-Point"
 
         # iSCSI ports
         elif current_type == 'iscsi':
@@ -1214,10 +1220,14 @@ def adjust_column_widths(ws):
         max_length = max((len(str(cell.value)) for cell in col if cell.value), default=10)
         col_letter = get_column_letter(col[0].column)
         ws.column_dimensions[col_letter].width = max_length + 2
-
+deep_blue_fill = PatternFill(start_color="b8cbdf", end_color="b8cbdf", fill_type="solid")
 # Format all sheets except "Device Info"
 for sheet_name in wb.sheetnames:
     ws = wb[sheet_name]
+    #Color the first row of sheets
+    if sheet_name != "Slot Info":
+        for cell in ws[1]:# First row
+            cell.fill = deep_blue_fill
     if sheet_name not in ("Device Info", "Slot Info"):# Skip merging for "Device Info" sheet
         for column in range(1,7):
             merge_cells_for_column(ws, column)
