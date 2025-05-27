@@ -829,7 +829,7 @@ def convert_wwn_hex_to_colon_format(wwn_hex: str) -> str:
         return wwn_hex  # Return as-is if not a valid WWN length
     return ":".join(hex_clean[i:i+2] for i in range(0, 16, 2))
 #Extract slot number
-def extract_slot_port_info(target_data):
+def extract_slot_port_info():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     pmc_files = glob.glob(os.path.join(script_dir, "output.txt"))
 
@@ -849,12 +849,6 @@ def extract_slot_port_info(target_data):
     current_slot = None
     current_type = None
     current_port = None
-
-    # Build a lookup map for FC WWN -> Connection Type
-    fc_target_map = {
-        target['Target Address'].lower(): target['Connection Type']
-        for target in target_data if 'Target Address' in target and 'Connection Type' in target
-    }
 
     for line in log.splitlines():
         line = line.strip()
@@ -896,6 +890,7 @@ def extract_slot_port_info(target_data):
                     slot_data[current_slot]['ports'][current_port]['connection_type'] = "SAN-Switch"
                 else:
                     slot_data[current_slot]['ports'][current_port]['connection_type'] = "Direct"
+
         # iSCSI ports
         elif current_type == 'iscsi':
             if line.startswith("speed_interface"):
@@ -1111,7 +1106,7 @@ hdd_data = [disk for disk in hdd_data]
 # Create an Excel writer
 excel_path = 'smart_data.xlsx'
 #Create slot info
-slot_info = extract_slot_port_info(target_data)
+slot_info = extract_slot_port_info()
 
 with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
     # Write SMART data to first sheet
