@@ -16,6 +16,7 @@ import subprocess
 from openpyxl.styles import PatternFill
 from pathlib import Path
 import time
+from collections import defaultdict
 # Define required parameters
 ssd_params = [
     "Reallocated_Sector_Ct",
@@ -649,7 +650,7 @@ def extract_host_info():
     is_pmc = os.path.isfile(os.path.join(os.path.dirname(__file__), 'output.txt'))
     print(f"[DEBUG] SCST file used: {input_file}")
     if is_pmc:
-        print("PMC output found")
+        #print("PMC output found")
         pmc_output = "output.txt"
         target_port_type = {}
         current_wwn = None
@@ -820,6 +821,100 @@ def extract_host_info():
     finally:
         if 'conn' in locals():
             conn.close()
+#convert wwn
+def convert_wwn_hex_to_colon_format(wwn_hex: str) -> str:
+    """Convert WWN from hex string like '0x51402ec001c676bc' to colon-separated format."""
+    hex_clean = wwn_hex.lower().replace("0x", "")
+    if len(hex_clean) != 16:
+        return wwn_hex  # Return as-is if not a valid WWN length
+    return ":".join(hex_clean[i:i+2] for i in range(0, 16, 2))
+#Extract slot number
+def extract_slot_port_info(target_data):
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    pmc_files = glob.glob(os.path.join(script_dir, "output.txt"))
+
+    if not pmc_files:
+        raise FileNotFoundError("output.txt not found in script directory.")
+    
+    with open(pmc_files[0], "r") as f:
+        log = f.read()
+
+    slot_data = defaultdict(lambda: {
+        'enabled_ports': [],
+        'total_ports': 0,
+        'port_type': '',
+        'ports': {}
+    })
+    
+    current_slot = None
+    current_type = None
+    current_port = None
+
+    # Build a lookup map for FC WWN -> Connection Type
+    fc_target_map = {
+        target['Target Address'].lower(): target['Connection Type']
+        for target in target_data if 'Target Address' in target and 'Connection Type' in target
+    }
+
+    for line in log.splitlines():
+        line = line.strip()
+
+        # Detect slot type
+        if "--------ISCSI CARDS SLOTS" in line:
+            current_type = 'iscsi'
+        elif "--------FC HBA CARDS SLOTS" in line:
+            current_type = 'fc'
+
+        # Match slot/port headers
+        match = re.search(r'(NIC|FC) CARD in SLOT (\d+) PORT (\d+)', line)
+        if match:
+            current_slot = match.group(2)
+            current_port = int(match.group(3))
+
+            slot_info = slot_data[current_slot]
+            slot_info['port_type'] = current_type
+            slot_info['total_ports'] += 1
+            slot_info['ports'][current_port] = {
+                'wwn': '',
+                'connection_type': '',
+                'speed': '-'
+            }
+            continue
+
+        # FC ports
+        if current_type == 'fc':
+            if line.startswith("port_speed"):
+                speed = line.split("=", 1)[1].strip()
+                slot_data[current_slot]['ports'][current_port]['speed'] = speed if "Unknown" not in speed else "-"
+            elif line.startswith("wwn ="):
+                raw_wwn = line.split("=", 1)[1].strip()
+                std_wwn = convert_wwn_hex_to_colon_format(raw_wwn)
+                slot_data[current_slot]['ports'][current_port]['wwn'] = std_wwn
+                slot_data[current_slot]['ports'][current_port]['connection_type'] = fc_target_map.get(std_wwn.lower(), '-')
+
+        # iSCSI ports
+        elif current_type == 'iscsi':
+            if line.startswith("speed_interface"):
+                speed = line.split("=", 1)[1].strip()
+                slot_data[current_slot]['ports'][current_port]['speed'] = speed if "Unknown" not in speed else "-"
+            elif line.startswith("mac_address"):
+                mac = line.split("=", 1)[1].strip()
+                slot_data[current_slot]['ports'][current_port]['mac_address'] = mac
+            elif line.startswith("iqn."):
+                iqn = line.strip()
+                slot_data[current_slot]['ports'][current_port]['wwn'] = iqn
+
+    # Final output list
+    result = []
+    for slot, info in slot_data.items():
+        result.append({
+            'slot': f"Slot{slot}",
+            'port_type': info['port_type'],
+            'total_ports': info['total_ports'],
+            'ports': info['ports']
+        })
+
+    return result
 #Extracts full_log using a RUST program
 def extractor():
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -859,6 +954,7 @@ if not os.path.isfile(os.path.join(script_dir, 'version')):
     extractor()
 # Path to the smarts.mylinux file in the /SystemOverallInfo directory
 smarts_file_path = os.path.join(script_dir, "SystemOverallInfo", "smarts.mylinux")
+target_data = extract_host_info()
 
 # Path to the storcli-Sall-show-all.mylinux file in the /SystemOverallInfo directory
 storcli_file_path = os.path.join(script_dir, "SystemOverallInfo", "storcli-Sall-show-all.mylinux")
@@ -880,6 +976,7 @@ device_data = extract_device_info(smarts_content)
 
 # Extract host information
 host_data = extract_host_info()
+#print(host_data)
 # Extract General Device Info
 sys_info = extract_sysinfo()
 # Extract enclosure/slot information
@@ -898,7 +995,93 @@ for disk in ssd_data + hdd_data:
 
     else:
         disk["En/Slot"] = ""
+def write_slot_info_sheet(writer, slot_data):
+    wb = writer.book
+    ws = wb.create_sheet("Slot Info")
 
+    slots_order = [str(i) for i in range(6, 0, -1)]  # Slots 6 to 1
+    attributes = ["Port", "WWN", "Connection Type", "Speed"]
+    cols_per_slot = len(attributes)
+
+    # Prepare a dict for quick access
+    slot_map = {slot['slot']: slot for slot in slot_data}
+
+    # Write first row: slot header merged across cols_per_slot columns
+    for i, slot_num in enumerate(slots_order):
+        start_col = i * cols_per_slot + 1
+        end_col = start_col + cols_per_slot - 1
+        cell = ws.cell(row=1, column=start_col)
+        cell.value = f"Slot{slot_num}"
+        ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Write second row: port type merged across same columns, empty if missing slot
+    for i, slot_num in enumerate(slots_order):
+        slot_key = f"Slot{slot_num}"
+        slot = slot_map.get(slot_key)
+        start_col = i * cols_per_slot + 1
+        end_col = start_col + cols_per_slot - 1
+
+        cell = ws.cell(row=2, column=start_col)
+        if slot is None or not slot.get('port_type'):
+            cell.value = ""
+        else:
+            cell.value = slot['port_type'].upper()
+        ws.merge_cells(start_row=2, start_column=start_col, end_row=2, end_column=end_col)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Write third row: attribute headers
+    for i, slot_num in enumerate(slots_order):
+        slot_key = f"Slot{slot_num}"
+        slot = slot_map.get(slot_key)
+        start_col = i * cols_per_slot + 1
+
+        if slot is None or slot['total_ports'] == 0:
+            for j in range(cols_per_slot):
+                ws.cell(row=3, column=start_col + j).value = ""
+        else:
+            for j, attr in enumerate(attributes):
+                label = attr
+                if attr == "Connection Type" and slot and slot.get('port_type', '').lower() == 'iscsi':
+                    label = "MAC Address"
+                ws.cell(row=3, column=start_col + j).value = label    # Determine max number of rows needed
+    max_ports = max((slot['total_ports'] for slot in slot_map.values()), default=0)
+
+    # Write port data (row 4 onward)
+    for row_idx in range(max_ports):
+        for i, slot_num in enumerate(slots_order):
+            slot_key = f"Slot{slot_num}"
+            slot = slot_map.get(slot_key)
+            start_col = i * cols_per_slot + 1
+
+            if slot is None or row_idx >= slot['total_ports']:
+                for offset in range(cols_per_slot):
+                    ws.cell(row=4 + row_idx, column=start_col + offset).value = ""
+                continue
+
+            port_info = slot['ports'].get(row_idx, {})
+            port = row_idx
+            wwn = port_info.get('wwn', '')
+
+            # Use MAC address instead of connection type for iSCSI
+            if slot.get('port_type', '').lower() == 'iscsi':
+                connection = port_info.get('mac_address') or port_info.get('mac') or "-"
+            else:
+                connection = port_info.get('connection_type', '-')  # FC fallback
+
+            speed = port_info.get('speed', '-')
+            if not speed or speed.lower() == "unknown":
+                speed = "-"
+
+            # Write to sheet
+            ws.cell(row=4 + row_idx, column=start_col).value = port
+            ws.cell(row=4 + row_idx, column=start_col + 1).value = wwn
+            ws.cell(row=4 + row_idx, column=start_col + 2).value = connection
+            ws.cell(row=4 + row_idx, column=start_col + 3).value = speed
+
+    # Adjust column widths
+    for col in range(1, cols_per_slot * len(slots_order) + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 20
 # Reorder columns to make "Enclosure/Slot" the first column
 def reorder_columns(data):
     return [{"En/Slot": disk.get("En/Slot", "N/A"), **disk} for disk in data]
@@ -912,6 +1095,9 @@ hdd_data = [disk for disk in hdd_data]
 
 # Create an Excel writer
 excel_path = 'smart_data.xlsx'
+#Create slot info
+slot_info = extract_slot_port_info(target_data)
+
 with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
     # Write SMART data to first sheet
     df_smart = pd.DataFrame(ssd_data + hdd_data)
@@ -935,7 +1121,7 @@ with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
     if sys_info:
         df_host = pd.DataFrame(sys_info)
         df_host.to_excel(writer, sheet_name="General System Info", index=False)
-
+    write_slot_info_sheet(writer, slot_info)
 # Open the Excel file and format it
 wb = load_workbook(excel_path)
 yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
@@ -1022,7 +1208,7 @@ def adjust_column_widths(ws):
 # Format all sheets except "Device Info"
 for sheet_name in wb.sheetnames:
     ws = wb[sheet_name]
-    if sheet_name != "Device Info":# Skip merging for "Device Info" sheet
+    if sheet_name not in ("Device Info", "Slot Info"):# Skip merging for "Device Info" sheet
         for column in range(1,7):
             merge_cells_for_column(ws, column)
         for column in range(11,16):
