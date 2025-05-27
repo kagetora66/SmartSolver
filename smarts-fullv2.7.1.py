@@ -887,11 +887,15 @@ def extract_slot_port_info(target_data):
                 speed = line.split("=", 1)[1].strip()
                 slot_data[current_slot]['ports'][current_port]['speed'] = speed if "Unknown" not in speed else "-"
             elif line.startswith("wwn ="):
-                raw_wwn = line.split("=", 1)[1].strip()
-                std_wwn = convert_wwn_hex_to_colon_format(raw_wwn)
-                slot_data[current_slot]['ports'][current_port]['wwn'] = std_wwn
-                slot_data[current_slot]['ports'][current_port]['connection_type'] = fc_target_map.get(std_wwn.lower(), '-')
-
+                wwn = line.split("=", 1)[1].strip().lower().replace("0x", "")
+                wwn_formatted = ":".join(wwn[i:i+2] for i in range(0, len(wwn), 2))
+                slot_data[current_slot]['ports'][current_port]['wwn'] = wwn_formatted
+            elif line.startswith("port_type"):
+                port_type = line.split("=", 1)[1].strip().lower()
+                if "nport" in port_type:
+                    slot_data[current_slot]['ports'][current_port]['connection_type'] = "SAN-Switch"
+                else:
+                    slot_data[current_slot]['ports'][current_port]['connection_type'] = "Direct"
         # iSCSI ports
         elif current_type == 'iscsi':
             if line.startswith("speed_interface"):
@@ -998,6 +1002,9 @@ for disk in ssd_data + hdd_data:
 def write_slot_info_sheet(writer, slot_data):
     wb = writer.book
     ws = wb.create_sheet("Slot Info")
+    grey_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")     # Light grey
+    green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")   # Light green for FC
+    blue_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")     # Light blue for iSCSI
 
     slots_order = [str(i) for i in range(6, 0, -1)]  # Slots 6 to 1
     attributes = ["Port", "WWN", "Connection Type", "Speed"]
@@ -1015,21 +1022,29 @@ def write_slot_info_sheet(writer, slot_data):
         ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
+        # Apply light grey fill if the slot has data
+        slot = slot_map.get(f"Slot{slot_num}")
+        if slot and slot['total_ports'] > 0:
+            for col in range(start_col, end_col + 1):
+                ws.cell(row=1, column=col).fill = grey_fill
     # Write second row: port type merged across same columns, empty if missing slot
     for i, slot_num in enumerate(slots_order):
         slot_key = f"Slot{slot_num}"
         slot = slot_map.get(slot_key)
         start_col = i * cols_per_slot + 1
         end_col = start_col + cols_per_slot - 1
-
+        ws.merge_cells(start_row=2, start_column=start_col, end_row=2, end_column=end_col)
         cell = ws.cell(row=2, column=start_col)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        
         if slot is None or not slot.get('port_type'):
             cell.value = ""
         else:
             cell.value = slot['port_type'].upper()
-        ws.merge_cells(start_row=2, start_column=start_col, end_row=2, end_column=end_col)
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-
+            # Fill color by port type
+            fill = green_fill if slot['port_type'].lower() == "fc" else blue_fill
+            for col in range(start_col, end_col + 1):
+                ws.cell(row=2, column=col).fill = fill        
     # Write third row: attribute headers
     for i, slot_num in enumerate(slots_order):
         slot_key = f"Slot{slot_num}"
