@@ -90,7 +90,8 @@ def extract_ssd_parameters(log_content):
         disk_type = ""
         capacity_match = re.search(r"\[([^\]]+)\]", block)
         if capacity_match:
-            tb_value = capacity_match.group(1) 
+            tb_value = capacity_match.group(1)
+            user_capacity = float(re.search(r'\d+(?:\.\d+)?', tb_value).group()) if re.search(r'\d+(?:\.\d+)?', tb_value) else 0            
         if is_ssd:
             serial_match = re.search(r"Serial Number:\s+(\S+)", block, re.IGNORECASE)
             serial_number = serial_match.group(1) if serial_match else "Unknown"
@@ -192,7 +193,7 @@ def extract_ssd_parameters(log_content):
                             
                     if total_lba_written is not None:
                         total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024
-                        threshold = threshold_micron_ssd.get("Total Size Written (TB)", "-")
+                        threshold_write_micron = 365 * 0.8 * 5 * user_capacity
                         data.append({
                             "Brand": brand,
                             "Device Model": device_model,
@@ -200,7 +201,7 @@ def extract_ssd_parameters(log_content):
                             "Interface": disk_type,
                             "Size": tb_value,
                             "Parameter": "Total Size Written (TB)",
-                            "Threshold": threshold,
+                            "Threshold": str(round(threshold_write_micron, -3)),
                             "Value": "-",
                             "Raw Value": f"{total_size_written_tb:.2f}"
                         })
@@ -229,7 +230,14 @@ def extract_ssd_parameters(log_content):
                             })
                     if total_lba_written is not None:
                         total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024
-                        threshold = threshold_sata_ssd.get("Total Size Written (TB)", "-")
+                        if "MZ" in device_model:
+                            threshold_samsung_write = 365 * 5 * user_capacity * 4
+                        elif "850" in device_model:
+                            threshold_samsung_write = 150
+                        elif "860" in device_model:
+                            threshold_samsung_write = 300
+                        elif "870" in device_model:
+                            threshold_samsung_model = 150
                         data.append({
                             "Brand": brand,
                             "Device Model": device_model,
@@ -237,7 +245,7 @@ def extract_ssd_parameters(log_content):
                             "Interface": disk_type,
                             "Size": tb_value,
                             "Parameter": "Total Size Written (TB)",
-                            "Threshold": threshold,
+                            "Threshold": str(round(threshold_samsung_write, -3)),
                             "Value": "-",
                             "Raw Value": f"{total_size_written_tb:.2f}"
                         })
