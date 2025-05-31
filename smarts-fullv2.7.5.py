@@ -231,13 +231,16 @@ def extract_ssd_parameters(log_content):
                     if total_lba_written is not None:
                         total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024
                         if "MZ" in device_model:
-                            threshold_samsung_write = 365 * 5 * user_capacity * 4
+                            threshold_samsung_write = round(365 * 5 * user_capacity * 4, -3)
                         elif "850" in device_model:
                             threshold_samsung_write = 150
                         elif "860" in device_model:
                             threshold_samsung_write = 300
                         elif "870" in device_model:
-                            threshold_samsung_model = 150
+                            threshold_samsung_write = 150
+                        else:
+                            threshold_samsung_write = 300 #undefined
+                            ther
                         data.append({
                             "Brand": brand,
                             "Device Model": device_model,
@@ -245,7 +248,7 @@ def extract_ssd_parameters(log_content):
                             "Interface": disk_type,
                             "Size": tb_value,
                             "Parameter": "Total Size Written (TB)",
-                            "Threshold": str(round(threshold_samsung_write, -3)),
+                            "Threshold": str(threshold_samsung_write),
                             "Value": "-",
                             "Raw Value": f"{total_size_written_tb:.2f}"
                         })
@@ -847,87 +850,85 @@ def extract_slot_port_info():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     pmc_files = glob.glob(os.path.join(script_dir, "output.txt"))
 
-    if not pmc_files:
-        raise FileNotFoundError("output.txt not found in script directory.")
-    
-    with open(pmc_files[0], "r") as f:
-        log = f.read()
+    if pmc_files:
 
-    slot_data = defaultdict(lambda: {
-        'enabled_ports': [],
-        'total_ports': 0,
-        'port_type': '',
-        'ports': {}
-    })
-    
-    current_slot = None
-    current_type = None
-    current_port = None
+        with open(pmc_files[0], "r") as f:
+            log = f.read()
 
-    for line in log.splitlines():
-        line = line.strip()
-
-        # Detect slot type
-        if "--------ISCSI CARDS SLOTS" in line:
-            current_type = 'iscsi'
-        elif "--------FC HBA CARDS SLOTS" in line:
-            current_type = 'fc'
-
-        # Match slot/port headers
-        match = re.search(r'(NIC|FC) CARD in SLOT (\d+) PORT (\d+)', line)
-        if match:
-            current_slot = match.group(2)
-            current_port = int(match.group(3))
-
-            slot_info = slot_data[current_slot]
-            slot_info['port_type'] = current_type
-            slot_info['total_ports'] += 1
-            slot_info['ports'][current_port] = {
-                'wwn': '',
-                'connection_type': '',
-                'speed': '-'
-            }
-            continue
-
-        # FC ports
-        if current_type == 'fc':
-            if line.startswith("port_speed"):
-                speed = line.split("=", 1)[1].strip()
-                slot_data[current_slot]['ports'][current_port]['speed'] = speed if "Unknown" not in speed else "-"
-            elif line.startswith("wwn ="):
-                wwn = line.split("=", 1)[1].strip().lower().replace("0x", "")
-                wwn_formatted = ":".join(wwn[i:i+2] for i in range(0, len(wwn), 2))
-                slot_data[current_slot]['ports'][current_port]['wwn'] = wwn_formatted
-            elif line.startswith("port_type"):
-                port_type = line.split("=", 1)[1].strip()
-                if "NPort" in port_type:
-                    slot_data[current_slot]['ports'][current_port]['connection_type'] = "SAN-Switch"
-                else:
-                    slot_data[current_slot]['ports'][current_port]['connection_type'] = "Point-to-Point"
-
-        # iSCSI ports
-        elif current_type == 'iscsi':
-            if line.startswith("speed_interface"):
-                speed = line.split("=", 1)[1].strip()
-                slot_data[current_slot]['ports'][current_port]['speed'] = speed if "Unknown" not in speed else "-"
-            elif line.startswith("mac_address"):
-                mac = line.split("=", 1)[1].strip()
-                slot_data[current_slot]['ports'][current_port]['mac_address'] = mac
-            elif line.startswith("iqn."):
-                iqn = line.strip()
-                slot_data[current_slot]['ports'][current_port]['wwn'] = iqn
-
-    # Final output list
-    result = []
-    for slot, info in slot_data.items():
-        result.append({
-            'slot': f"Slot{slot}",
-            'port_type': info['port_type'],
-            'total_ports': info['total_ports'],
-            'ports': info['ports']
+        slot_data = defaultdict(lambda: {
+            'enabled_ports': [],
+            'total_ports': 0,
+            'port_type': '',
+            'ports': {}
         })
+    
+        current_slot = None
+        current_type = None
+        current_port = None
 
-    return result
+        for line in log.splitlines():
+            line = line.strip()
+
+            # Detect slot type
+            if "--------ISCSI CARDS SLOTS" in line:
+                current_type = 'iscsi'
+            elif "--------FC HBA CARDS SLOTS" in line:
+                current_type = 'fc'
+
+            # Match slot/port headers
+            match = re.search(r'(NIC|FC) CARD in SLOT (\d+) PORT (\d+)', line)
+            if match:
+                current_slot = match.group(2)
+                current_port = int(match.group(3))
+
+                slot_info = slot_data[current_slot]
+                slot_info['port_type'] = current_type
+                slot_info['total_ports'] += 1
+                slot_info['ports'][current_port] = {
+                    'wwn': '',
+                    'connection_type': '',
+                    'speed': '-'
+                }
+                continue
+
+            # FC ports
+            if current_type == 'fc':
+                if line.startswith("port_speed"):
+                    speed = line.split("=", 1)[1].strip()
+                    slot_data[current_slot]['ports'][current_port]['speed'] = speed if "Unknown" not in speed else "-"
+                elif line.startswith("wwn ="):
+                    wwn = line.split("=", 1)[1].strip().lower().replace("0x", "")
+                    wwn_formatted = ":".join(wwn[i:i+2] for i in range(0, len(wwn), 2))
+                    slot_data[current_slot]['ports'][current_port]['wwn'] = wwn_formatted
+                elif line.startswith("port_type"):
+                    port_type = line.split("=", 1)[1].strip()
+                    if "NPort" in port_type:
+                        slot_data[current_slot]['ports'][current_port]['connection_type'] = "SAN-Switch"
+                    else:
+                        slot_data[current_slot]['ports'][current_port]['connection_type'] = "Point-to-Point"
+
+            # iSCSI ports
+            elif current_type == 'iscsi':
+                if line.startswith("speed_interface"):
+                    speed = line.split("=", 1)[1].strip()
+                    slot_data[current_slot]['ports'][current_port]['speed'] = speed if "Unknown" not in speed else "-"
+                elif line.startswith("mac_address"):
+                    mac = line.split("=", 1)[1].strip()
+                    slot_data[current_slot]['ports'][current_port]['mac_address'] = mac
+                elif line.startswith("iqn."):
+                    iqn = line.strip()
+                    slot_data[current_slot]['ports'][current_port]['wwn'] = iqn
+
+        result = []
+        for slot, info in slot_data.items():
+            result.append({
+                'slot': f"Slot{slot}",
+                'port_type': info['port_type'],
+                'total_ports': info['total_ports'],
+                'ports': info['ports']
+            })
+
+        return result
 #Extracts full_log using a RUST program
 def extractor():
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1145,7 +1146,9 @@ with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
     if sys_info:
         df_host = pd.DataFrame(sys_info)
         df_host.to_excel(writer, sheet_name="General System Info", index=False)
-    write_slot_info_sheet(writer, slot_info)
+    if slot_info:
+        write_slot_info_sheet(writer, slot_info)
+
 # Open the Excel file and format it
 wb = load_workbook(excel_path)
 yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
