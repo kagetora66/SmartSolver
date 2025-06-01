@@ -17,6 +17,7 @@ from openpyxl.styles import PatternFill
 from pathlib import Path
 import time
 from collections import defaultdict
+from collections import Counter
 # Define required parameters
 ssd_params = [
     "Reallocated_Sector_Ct",
@@ -44,12 +45,7 @@ micron_ssd_params = {
     "Unused_Rsvd_Blk_Cnt_Tot": "180",
     "Total_LBAs_Written": "246"  # Unknown attribute at ID# 246
 }
-threshold_sas_ssd = {
-    "Elements in grown defect list": "799",
-    "Total Uncorrected Errors": "39",
-    "Accumulated start-stop cycles": "8999",
-    "SS Media used endurance indicator %": "90"
-} 
+
 threshold_sata_ssd = {
     "Reallocated_Sector_Ct": "10",
     "Power_On_Hours": "5",
@@ -112,7 +108,15 @@ def extract_ssd_parameters(log_content):
                 read_error_value = int(read_error_match.group(1)) if read_error_match else 0
                 write_error_value = int(write_error_match.group(1)) if write_error_match else 0
                 total_uncorrected_errors = read_error_value + write_error_value
-
+                total_uncorrrected_threshold = int(user_capacity)  * 5
+                Element_in_defect_threshold = int(user_capacity)  * 100
+        #We convert to str again for consistency
+                threshold_sas_ssd = {
+                    "Elements in grown defect list": str(Element_in_defect_threshold),
+                    "Total Uncorrected Errors": str(total_uncorrrected_threshold),
+                    "Accumulated start-stop cycles": "10000",
+                    "Accumulated load-unload cycles": "300000"
+                    }
                 hdd_values = [
                     ("Elements in grown defect list", elements_grown_defect),
                     ("Total Uncorrected Errors", total_uncorrected_errors),
@@ -929,6 +933,51 @@ def extract_slot_port_info():
             })
 
         return result
+#For the purpose of counting disk type and size for LOM
+def consolidate_by_serial(smart_list):
+    consolidated = {}
+
+    for entry in smart_list:
+        serial = entry.get("Serial Number", "").strip()
+        if not serial:
+            continue  # Skip empty or malformed entries
+
+        if serial not in consolidated:
+            # Initialize with static fields
+            consolidated[serial] = {
+                "Serial Number": serial,
+                "Brand": entry.get("Brand", ""),
+                "Device Model": entry.get("Device Model", ""),
+                "Interface": entry.get("Interface", ""),
+                "Size": entry.get("Size", "")
+            }
+
+        param = entry.get("Parameter", "").strip()
+        raw_val = entry.get("Raw Value", "").strip()
+
+        if param:
+            consolidated[serial][param] = raw_val
+
+    return list(consolidated.values())
+def lom_disk(disk_dicts):
+    type_size_list = []
+    disk_data = consolidate_by_serial(disk_dicts)
+
+    for d in disk_data:
+        interface = d.get("Interface", "").strip()
+        size = d.get("Size", "").strip()
+        model = d.get("Device Model", "").strip()
+        if interface and size and model:
+            disk_type = interface.split()[0]  # Get "HDD" or "SSD"
+            type_size_list.append((disk_type, size, model))
+
+    counts = Counter(type_size_list)
+
+    lom_disk_count = [
+        {"Type": t, "Size": s, "Model": m, "Count": c}
+        for (t, s, m), c in counts.items()
+    ]
+    return lom_disk_count
 #Extracts full_log using a RUST program
 def extractor():
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -987,7 +1036,10 @@ except FileNotFoundError:
 ssd_data = extract_ssd_parameters(smarts_content)
 hdd_data = extract_hdd_parameters(smarts_content)
 device_data = extract_device_info(smarts_content)
-
+if ssd_data:
+    ssd_lom = lom_disk(ssd_data)
+if hdd_data:
+    hdd_lom = lom_disk(hdd_data)
 # Extract host information
 host_data = extract_host_info()
 #print(host_data)
@@ -1148,7 +1200,14 @@ with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
         df_host.to_excel(writer, sheet_name="General System Info", index=False)
     if slot_info:
         write_slot_info_sheet(writer, slot_info)
-
+    if ssd_lom or hdd_lom:
+        dfs = []
+        if ssd_lom:
+            dfs.append(pd.DataFrame(ssd_lom))
+        if hdd_lom:
+            dfs.append(pd.DataFrame(hdd_lom))
+        df_combined = pd.concat(dfs, ignore_index=True)
+        df_combined.to_excel(writer, sheet_name="LOM", index=False)
 # Open the Excel file and format it
 wb = load_workbook(excel_path)
 yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
