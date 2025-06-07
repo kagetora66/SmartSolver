@@ -1011,6 +1011,9 @@ def extractor():
     except subprocess.CalledProcessError as e:
         print(f"[Python] Rust extractor failed: {e}")
         return False
+# Reorder columns to make "Enclosure/Slot" the first column
+def reorder_columns(data):
+    return [{"En/Slot": disk.get("En/Slot", "N/A"), **disk} for disk in data]
 #Extract files
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isfile(os.path.join(script_dir, 'version')):
@@ -1034,8 +1037,13 @@ except FileNotFoundError:
 
 # Extract SSD, HDD, and device info data
 ssd_data = extract_ssd_parameters(smarts_content)
+# Check if OS disks are present
+
+
 hdd_data = extract_hdd_parameters(smarts_content)
 device_data = extract_device_info(smarts_content)
+ssd_lom = []
+hdd_lom = []
 if ssd_data:
     ssd_lom = lom_disk(ssd_data)
 if hdd_data:
@@ -1061,6 +1069,19 @@ for disk in ssd_data + hdd_data:
 
     else:
         disk["En/Slot"] = ""
+is_os = any("250 GB" in str(value) for d in ssd_data for value in d.values())
+#OS Disk not found therefore we extract from pmc output
+if not is_os:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    pmc_files = glob.glob(os.path.join(script_dir, "output.txt"))
+    if pmc_files:
+        with open(pmc_files[0], "r") as f:
+            log = f.read()
+        ssd_os = extract_ssd_parameters(log)
+        for disk in ssd_os:
+            disk["En/Slot"] = "Not in RC"
+        ssd_data.extend(ssd_os)
+
 def write_slot_info_sheet(writer, slot_data):
     wb = writer.book
     ws = wb.create_sheet("Slot Info")
@@ -1159,9 +1180,7 @@ def write_slot_info_sheet(writer, slot_data):
     # Adjust column widths
     for col in range(1, cols_per_slot * len(slots_order) + 1):
         ws.column_dimensions[get_column_letter(col)].width = 20
-# Reorder columns to make "Enclosure/Slot" the first column
-def reorder_columns(data):
-    return [{"En/Slot": disk.get("En/Slot", "N/A"), **disk} for disk in data]
+
 
 ssd_data = reorder_columns(ssd_data)
 hdd_data = reorder_columns(hdd_data)
