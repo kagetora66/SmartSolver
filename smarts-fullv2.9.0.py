@@ -66,6 +66,30 @@ threshold_micron_ssd = {
     "Total Size Written (TB)": "6400"
     
 }
+#Part Numbers for SSD and HDD Disks (LOM prepration)
+partnums = [
+    {"Type": "HDD", "Interface": "SAS", "Size": "1.2 TB", "Describtion": "HPDS 1.2TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-1200"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "1.8 TB", "Describtion": "HPDS 1.8TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-600"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "2.4 TB", "Describtion": "HPDS 2.4TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-2400"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "2.00 TB", "Describtion": "HPDS 2TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-2000"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "4.00 TB", "Describtion": "HPDS 4TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-4000"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "6.00 TB", "Describtion": "HPDS 6TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-6000"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "8.00 TB", "Describtion": "HPDS 8TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-8000"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "12.00 TB", "Describtion": "HPDS 12TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-12000"},
+    {"Type": "HDD", "Interface": "SATA", "Size": "1.94 TB", "Describtion": "HPDS 1.9TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-1900"},
+    {"Type": "HDD", "Interface": "SATA", "Size": "3.84 TB", "Describtion": "HPDS 3.8TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-3800"},
+    {"Type": "HDD", "Interface": "SATA", "Size": "7.6 TB", "Describtion": "HPDS 7.6TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-7600"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "16.00 TB", "Describtion": "HPDS 16TB SAS 7.2K Enterprise HDD SX for SAB-HB", "Part Number": "DHBD-HS07SX-16000"},
+    {"Type": "SSD", "Interface": "SATA", "Size": "960 GB", "Describtion": "HPDS 960GB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-960"},
+    {"Type": "SSD", "Interface": "SATA", "Size": "1.92 TB", "Describtion": "HPDS 1.9TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-1900"},
+    {"Type": "SSD", "Interface": "SATA", "Size": "3.84 TB", "Describtion": "HPDS 3.8TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-3800"},
+    {"Type": "SSD", "Interface": "SATA", "Size": "7.6 TB", "Describtion": "HPDS 7.6TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-7600"},
+    {"Type": "SSD", "Interface": "SAS", "Size": "960 GB", "Describtion": "HPDS 960GB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-960"},
+    {"Type": "SSD", "Interface": "SAS", "Size": "1.92 TB", "Describtion": "HPDS 1.9TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-1920"},
+    {"Type": "SSD", "Interface": "SAS", "Size": "3.84 TB", "Describtion": "HPDS 3.8TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-3840"},
+    {"Type": "SSD", "Interface": "SAS", "Size": "7.6 TB", "Describtion": "HPDS 7.6TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-7680"}
+]
+
 smart_pattern = re.compile(
     r"(\d+)\s+([\w_]+)\s+0x[0-9a-fA-F]+\s+(\d+)\s+\d+\s+(\d+)\s+\w+-?\w*\s+\w+\s+-\s+(\d+)"
 )
@@ -880,11 +904,12 @@ def extract_slot_port_info():
                 current_type = 'fc'
 
             # Match slot/port headers
-            match = re.search(r'(NIC|FC) CARD in SLOT (\d+) PORT (\d+)', line)
+            match = re.search(r'(NIC|FC) CARD in SLOT\s+(\d+)\s+PORT\s+(\d+)(?:\s+\([^)]+\))?', line)
             if match:
                 current_slot = match.group(2)
+                print(current_slot)
                 current_port = int(match.group(3))
-
+                print(current_port)
                 slot_info = slot_data[current_slot]
                 slot_info['port_type'] = current_type
                 slot_info['total_ports'] += 1
@@ -967,16 +992,21 @@ def lom_disk(disk_dicts):
         interface = d.get("Interface", "").strip()
         size = d.get("Size", "").strip()
         model = d.get("Device Model", "").strip()
-        if interface and size and model:
+        if interface and size and type:
             disk_type = interface.split()[0]  # Get "HDD" or "SSD"
-            type_size_list.append((disk_type, size, model))
+            disk_interface = interface.split()[-1]
+            type_size_list.append((disk_type, size, disk_interface))
 
     counts = Counter(type_size_list)
-
-    lom_disk_count = [
-        {"Type": t, "Size": s, "Model": m, "Count": c}
-        for (t, s, m), c in counts.items()
-    ]
+    lom_disk_count = []
+    for (Type, size, interface), count in counts.items():
+        for part in partnums:
+            if  part["Type"] == Type and part["Size"] == size and part["Interface"] == interface:
+                lom_disk_count.append({
+                    "Describtion": part["Describtion"],
+                    "Part Number": part["Part Number"],
+                    "Count": count
+                })
     return lom_disk_count
 #Extracts full_log using a RUST program
 def extractor():
