@@ -78,16 +78,16 @@ partnums = [
     {"Type": "HDD", "Interface": "SAS", "Size": "12.00 TB", "Describtion": "HPDS 12TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-12000"},
     {"Type": "HDD", "Interface": "SATA", "Size": "1.94 TB", "Describtion": "HPDS 1.9TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-1900"},
     {"Type": "HDD", "Interface": "SATA", "Size": "3.84 TB", "Describtion": "HPDS 3.8TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-3800"},
-    {"Type": "HDD", "Interface": "SATA", "Size": "7.6 TB", "Describtion": "HPDS 7.6TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-7600"},
+    {"Type": "HDD", "Interface": "SATA", "Size": "7.68 TB", "Describtion": "HPDS 7.6TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-7600"},
     {"Type": "HDD", "Interface": "SAS", "Size": "16.00 TB", "Describtion": "HPDS 16TB SAS 7.2K Enterprise HDD SX for SAB-HB", "Part Number": "DHBD-HS07SX-16000"},
     {"Type": "SSD", "Interface": "SATA", "Size": "960 GB", "Describtion": "HPDS 960GB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-960"},
     {"Type": "SSD", "Interface": "SATA", "Size": "1.92 TB", "Describtion": "HPDS 1.9TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-1900"},
     {"Type": "SSD", "Interface": "SATA", "Size": "3.84 TB", "Describtion": "HPDS 3.8TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-3800"},
-    {"Type": "SSD", "Interface": "SATA", "Size": "7.6 TB", "Describtion": "HPDS 7.6TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-7600"},
+    {"Type": "SSD", "Interface": "SATA", "Size": "7.68 TB", "Describtion": "HPDS 7.6TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-7600"},
     {"Type": "SSD", "Interface": "SAS", "Size": "960 GB", "Describtion": "HPDS 960GB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-960"},
     {"Type": "SSD", "Interface": "SAS", "Size": "1.92 TB", "Describtion": "HPDS 1.9TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-1920"},
     {"Type": "SSD", "Interface": "SAS", "Size": "3.84 TB", "Describtion": "HPDS 3.8TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-3840"},
-    {"Type": "SSD", "Interface": "SAS", "Size": "7.6 TB", "Describtion": "HPDS 7.6TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-7680"}
+    {"Type": "SSD", "Interface": "SAS", "Size": "7.68 TB", "Describtion": "HPDS 7.6TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-7680"}
 ]
 
 smart_pattern = re.compile(
@@ -693,7 +693,7 @@ def extract_host_info():
 
     # Checks for output.txt file inside script directory 
     is_pmc = os.path.isfile(os.path.join(os.path.dirname(__file__), 'output.txt'))
-    print(f"[DEBUG] SCST file used: {input_file}")
+    #print(f"[DEBUG] SCST file used: {input_file}")
     if is_pmc:
         #print("PMC output found")
         pmc_output = "output.txt"
@@ -907,9 +907,7 @@ def extract_slot_port_info():
             match = re.search(r'(NIC|FC) CARD in SLOT\s+(\d+)\s+PORT\s+(\d+)(?:\s+\([^)]+\))?', line)
             if match:
                 current_slot = match.group(2)
-                print(current_slot)
                 current_port = int(match.group(3))
-                print(current_port)
                 slot_info = slot_data[current_slot]
                 slot_info['port_type'] = current_type
                 slot_info['total_ports'] += 1
@@ -1019,7 +1017,7 @@ def extractor():
     try:
         # Launch Rust binary (non-blocking)
         subprocess.Popen([rust_binary])
-        print("Rust extractor started in background.")
+        print("Extractor started in background.")
         
         # Simulate work with extracted files
         print("Processing extracted files...")
@@ -1266,14 +1264,13 @@ if "SMART Data" in wb.sheetnames:
     ws = wb["SMART Data"]
     for row in ws.iter_rows(min_row=2):  # Skip header row (row 1)
         # Extract relevant cells
-        threshold_cell = row[5]  # Column F (Threshold)
-        value_cell = row[6]      # Column G (Value)
-        raw_value_cell = row[7]  # Column H (Raw Value)
+        threshold_cell = row[7]  # Column H (Threshold)
+        value_cell = row[8]      # Column I (Value)
+        raw_value_cell = row[9]  # Column J (Raw Value)
         
         threshold_str = threshold_cell.value
         value_str = value_cell.value
         raw_value_str = raw_value_cell.value
-
         # Skip rows with missing/invalid thresholds
         if not threshold_str or threshold_str == "-":
             continue
