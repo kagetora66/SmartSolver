@@ -9,7 +9,24 @@ use std::io::BufRead;
 use std::sync::mpsc;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Extract files
-    let zip_path = find_zip_file()?;
+    let zip_path = match find_zip_file() {
+    Ok(path) => path,  // If main zip found, use it
+    Err(_) => {        // If not, try fallback
+        match find_other_zips() {
+            Ok(zips) => {
+                match zips.first() {
+                    Some(path) => path.clone(),  // Clone the first path if exists
+                    None => return Err("No zip files found".into()),  // No zips at all
+                }
+            }
+            Err(e) => return Err(e),  // Propagate find_other_zips() error
+        }
+    }
+  };
+    //if !validate(&zip_path) {
+    //    eprintln!("Invalid zip file: {}", zip_path.display());
+    //    std::process::exit(1);
+    //}    
     let password = rpassword::prompt_password("Enter password: ")?;
     let mut extracted_files = extract_zip(&zip_path, Some(&password))?;
     
@@ -198,4 +215,14 @@ fn wait_for_signal_and_cleanup(extracted_files: Vec<PathBuf>) -> io::Result<()> 
 
     Ok(())
 }
+
+
+
+
+
+
+
+
+
+
 

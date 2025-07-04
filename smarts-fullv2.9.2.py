@@ -66,6 +66,37 @@ threshold_micron_ssd = {
     "Total Size Written (TB)": "6400"
     
 }
+#Part Numbers for SSD and HDD Disks (LOM prepration)
+partnums = [
+    {"Type": "HDD", "Interface": "SAS", "Size": "1.20 TB", "Describtion": "HPDS 1.2TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-1200"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "1.80 TB", "Describtion": "HPDS 1.8TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-600"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "2.40 TB", "Describtion": "HPDS 2.4TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-2400"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "2.00 TB", "Describtion": "HPDS 2TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-2000"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "4.00 TB", "Describtion": "HPDS 4TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-4000"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "6.00 TB", "Describtion": "HPDS 6TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-6000"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "8.00 TB", "Describtion": "HPDS 8TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-8000"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "12.00 TB", "Describtion": "HPDS 12TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-12000"},
+    {"Type": "HDD", "Interface": "SATA", "Size": "1.94 TB", "Describtion": "HPDS 1.9TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-1900"},
+    {"Type": "HDD", "Interface": "SATA", "Size": "3.84 TB", "Describtion": "HPDS 3.8TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-3800"},
+    {"Type": "HDD", "Interface": "SATA", "Size": "7.68 TB", "Describtion": "HPDS 7.6TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-7600"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "16.00 TB", "Describtion": "HPDS 16TB SAS 7.2K Enterprise HDD SX for SAB-HB", "Part Number": "DHBD-HS07SX-16000"},
+    {"Type": "SSD", "Interface": "SATA", "Size": "960 GB", "Describtion": "HPDS 960GB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-960"},
+    {"Type": "SSD", "Interface": "SATA", "Size": "1.92 TB", "Describtion": "HPDS 1.9TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-1900"},
+    {"Type": "SSD", "Interface": "SATA", "Size": "3.84 TB", "Describtion": "HPDS 3.8TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-3800"},
+    {"Type": "SSD", "Interface": "SATA", "Size": "7.68 TB", "Describtion": "HPDS 7.6TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-7600"},
+    {"Type": "SSD", "Interface": "SAS", "Size": "960 GB", "Describtion": "HPDS 960GB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-960"},
+    {"Type": "SSD", "Interface": "SAS", "Size": "1.92 TB", "Describtion": "HPDS 1.9TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-1920"},
+    {"Type": "SSD", "Interface": "SAS", "Size": "3.84 TB", "Describtion": "HPDS 3.8TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-3840"},
+    {"Type": "SSD", "Interface": "SAS", "Size": "7.68 TB", "Describtion": "HPDS 7.6TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-7680"}
+]
+partnums_card = [
+    {"Type": "FC", "Ports": 2, "Speed": "8Gb", "Describtion": "HPDS 8Gb 2-port PCIe Fiber Channel HBA", "Part Number": "PI-FM08G2P"},
+    {"Type": "FC", "Ports": 4, "Speed": "8Gb", "Describtion": "HPDS 8Gb 4-port PCIe Fiber Channel HBA", "Part Number": "PI-FM08G4P"},
+    {"Type": "FC", "Ports": 2, "Speed": "16Gb", "Describtion": "HPDS 16Gb 2-port PCIe Fiber Channel HBA", "Part Number": "PI-FM16G2P"},
+    {"Type": "FC", "Ports": 4, "Speed": "16Gb", "Describtion": "HPDS 16Gb 4-port PCIe Fiber Channel HBA", "Part Number": "PI-FM16G4P"},
+    {"Type": "NIC", "Ports": 4, "Speed": "1Gb", "Describtion": "HPDS 1Gb 4-port PCIe Ethernet Adapter", "Part Number": "PI-N1GT4P"},
+    {"Type": "NIC", "Ports": 2, "Speed": "10Gb", "Describtion": "HPDS 10Gb 2-port PCIe Ethernet Adapter", "Part Number": "PI-NT10G2P"}
+]
 smart_pattern = re.compile(
     r"(\d+)\s+([\w_]+)\s+0x[0-9a-fA-F]+\s+(\d+)\s+\d+\s+(\d+)\s+\w+-?\w*\s+\w+\s+-\s+(\d+)"
 )
@@ -669,7 +700,7 @@ def extract_host_info():
 
     # Checks for output.txt file inside script directory 
     is_pmc = os.path.isfile(os.path.join(os.path.dirname(__file__), 'output.txt'))
-    print(f"[DEBUG] SCST file used: {input_file}")
+    #print(f"[DEBUG] SCST file used: {input_file}")
     if is_pmc:
         #print("PMC output found")
         pmc_output = "output.txt"
@@ -880,11 +911,10 @@ def extract_slot_port_info():
                 current_type = 'fc'
 
             # Match slot/port headers
-            match = re.search(r'(NIC|FC) CARD in SLOT (\d+) PORT (\d+)', line)
+            match = re.search(r'(NIC|FC) CARD in SLOT\s+(\d+)\s+PORT\s+(\d+)(?:\s+\([^)]+\))?', line)
             if match:
                 current_slot = match.group(2)
                 current_port = int(match.group(3))
-
                 slot_info = slot_data[current_slot]
                 slot_info['port_type'] = current_type
                 slot_info['total_ports'] += 1
@@ -967,17 +997,115 @@ def lom_disk(disk_dicts):
         interface = d.get("Interface", "").strip()
         size = d.get("Size", "").strip()
         model = d.get("Device Model", "").strip()
-        if interface and size and model:
+        if interface and size and type:
             disk_type = interface.split()[0]  # Get "HDD" or "SSD"
-            type_size_list.append((disk_type, size, model))
+            disk_interface = interface.split()[-1]
+            type_size_list.append((disk_type, size, disk_interface))
 
     counts = Counter(type_size_list)
-
-    lom_disk_count = [
-        {"Type": t, "Size": s, "Model": m, "Count": c}
-        for (t, s, m), c in counts.items()
-    ]
+    lom_disk_count = []
+    for (Type, size, interface), count in counts.items():
+        for part in partnums:
+            if  part["Type"] == Type and part["Size"] == size and part["Interface"] == interface:
+                lom_disk_count.append({
+                    "Describtion": part["Describtion"],
+                    "Part Number": part["Part Number"],
+                    "Count": count
+                })
     return lom_disk_count
+#Extracts the data for fc ports
+def lom_cards():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
+
+    with open(sysinfo_file, "r") as file:
+        file_content = file.read()
+
+    card_types = [
+        {
+            "section": "FC Cards",
+            "label": "FC",
+            "pattern": r"(\d+):\d+\.\d+ Fibre Channel:\s+(.+)"
+        },
+        {
+            "section": "Network Cards",
+            "label": "NIC",
+            "pattern": r"(\d+):\d+\.\d+ Ethernet controller:\s+(.+)"
+        }
+    ]
+
+    result = []
+
+    for card_type in card_types:
+        section = card_type["section"]
+        label = card_type["label"]
+        pattern = re.compile(card_type["pattern"])
+
+        in_section = False
+        grouped = defaultdict(list)
+
+        for line in file_content.splitlines():
+            line = line.strip()
+            if line == section:
+                in_section = True
+                continue
+            elif in_section and line.startswith("-="):
+                break
+            elif in_section:
+                match = pattern.match(line)
+                if match:
+                    prefix = match.group(1)
+                    model = match.group(2)
+                    grouped[(prefix, model)].append(line)
+
+        for (prefix, model), lines in grouped.items():
+            result.append({
+                "port count": len(lines),
+                "Card": label,
+                "model": model
+            })
+
+    return result
+#Counts the FC/ISCSI ports from the output of lomfc_port
+def merge_duplicate_dicts(dict_list):
+    # Convert each dict into a hashable sorted tuple
+    hashed = [tuple(sorted(d.items())) for d in dict_list]
+
+    counts = Counter(hashed)
+
+    # Reconstruct merged dicts with 'count' added
+    result = []
+    for items, count in counts.items():
+        merged_dict = dict(items)
+        merged_dict["count"] = count
+        result.append(merged_dict)
+    return result
+#This part parses the information genereted by lom_ports into format suitable for LOM sheet
+def lom_card_parcer(cards):
+    lom_cards = []
+    for card in cards:
+        speed = 0
+        Type = card["Card"]
+        ports = card["port count"]
+        count = card["count"]
+        if "2261" in card.get("model", ""):
+            speed = "16Gb"
+        if "10GbE" in card.get("model", ""):
+            speed = "10Gb"
+        if "Gigabit" in card.get("model", ""):
+            speed = "1Gb"
+        if "8Gb" in card.get("model", ""):
+            speed = "8Gb"
+        if "16Gb" in card.get("model", ""):
+            speed = "16Gb"
+        for part in partnums_card:
+            if ports != 1 and part["Type"] == Type and part["Ports"] == ports and part["Speed"] == speed:
+                lom_cards.append({
+                    "Describtion": part["Describtion"],
+                    "Part Number": part["Part Number"],
+                    "Count": count
+                })
+    return lom_cards
 #Extracts full_log using a RUST program
 def extractor():
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -989,7 +1117,7 @@ def extractor():
     try:
         # Launch Rust binary (non-blocking)
         subprocess.Popen([rust_binary])
-        print("Rust extractor started in background.")
+        print("Extractor started in background.")
         
         # Simulate work with extracted files
         print("Processing extracted files...")
@@ -1011,6 +1139,9 @@ def extractor():
     except subprocess.CalledProcessError as e:
         print(f"[Python] Rust extractor failed: {e}")
         return False
+# Reorder columns to make "Enclosure/Slot" the first column
+def reorder_columns(data):
+    return [{"En/Slot": disk.get("En/Slot", "N/A"), **disk} for disk in data]
 #Extract files
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isfile(os.path.join(script_dir, 'version')):
@@ -1034,21 +1165,29 @@ except FileNotFoundError:
 
 # Extract SSD, HDD, and device info data
 ssd_data = extract_ssd_parameters(smarts_content)
+# Check if OS disks are present
+
+
 hdd_data = extract_hdd_parameters(smarts_content)
 device_data = extract_device_info(smarts_content)
+ssd_lom = []
+hdd_lom = []
 if ssd_data:
     ssd_lom = lom_disk(ssd_data)
 if hdd_data:
     hdd_lom = lom_disk(hdd_data)
 # Extract host information
 host_data = extract_host_info()
-#print(host_data)
 # Extract General Device Info
 sys_info = extract_sysinfo()
 # Extract enclosure/slot information
 serial_numbers = set([disk["Serial Number"] for disk in ssd_data + hdd_data if disk["Serial Number"] != "Unknown"])
 enclosure_slot_data = extract_enclosure_slot_info(storcli_content, serial_numbers)
-
+#lom for cards
+lom_cards_results = lom_cards()
+if lom_cards_results:
+   lom_cards_fixed = merge_duplicate_dicts(lom_cards_results)
+   lom_cards_final = lom_card_parcer(lom_cards_fixed)
 # Add enclosure/slot information to SSD and HDD data
 for disk in ssd_data + hdd_data:
     if disk["Serial Number"] in enclosure_slot_data:
@@ -1061,6 +1200,19 @@ for disk in ssd_data + hdd_data:
 
     else:
         disk["En/Slot"] = ""
+is_os = any("250 GB" in str(value) for d in ssd_data for value in d.values())
+#OS Disk not found therefore we extract from pmc output
+if not is_os:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    pmc_files = glob.glob(os.path.join(script_dir, "output.txt"))
+    if pmc_files:
+        with open(pmc_files[0], "r") as f:
+            log = f.read()
+        ssd_os = extract_ssd_parameters(log)
+        for disk in ssd_os:
+            disk["En/Slot"] = "Not in RC"
+        ssd_data.extend(ssd_os)
+
 def write_slot_info_sheet(writer, slot_data):
     wb = writer.book
     ws = wb.create_sheet("Slot Info")
@@ -1159,9 +1311,7 @@ def write_slot_info_sheet(writer, slot_data):
     # Adjust column widths
     for col in range(1, cols_per_slot * len(slots_order) + 1):
         ws.column_dimensions[get_column_letter(col)].width = 20
-# Reorder columns to make "Enclosure/Slot" the first column
-def reorder_columns(data):
-    return [{"En/Slot": disk.get("En/Slot", "N/A"), **disk} for disk in data]
+
 
 ssd_data = reorder_columns(ssd_data)
 hdd_data = reorder_columns(hdd_data)
@@ -1200,12 +1350,14 @@ with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
         df_host.to_excel(writer, sheet_name="General System Info", index=False)
     if slot_info:
         write_slot_info_sheet(writer, slot_info)
-    if ssd_lom or hdd_lom:
+    if ssd_lom or hdd_lom or lom_cards_final:
         dfs = []
         if ssd_lom:
             dfs.append(pd.DataFrame(ssd_lom))
         if hdd_lom:
             dfs.append(pd.DataFrame(hdd_lom))
+        if lom_cards_final:
+            dfs.append(pd.DataFrame(lom_cards_final))
         df_combined = pd.concat(dfs, ignore_index=True)
         df_combined.to_excel(writer, sheet_name="LOM", index=False)
 # Open the Excel file and format it
@@ -1217,14 +1369,13 @@ if "SMART Data" in wb.sheetnames:
     ws = wb["SMART Data"]
     for row in ws.iter_rows(min_row=2):  # Skip header row (row 1)
         # Extract relevant cells
-        threshold_cell = row[5]  # Column F (Threshold)
-        value_cell = row[6]      # Column G (Value)
-        raw_value_cell = row[7]  # Column H (Raw Value)
+        threshold_cell = row[7]  # Column H (Threshold)
+        value_cell = row[8]      # Column I (Value)
+        raw_value_cell = row[9]  # Column J (Raw Value)
         
         threshold_str = threshold_cell.value
         value_str = value_cell.value
         raw_value_str = raw_value_cell.value
-
         # Skip rows with missing/invalid thresholds
         if not threshold_str or threshold_str == "-":
             continue
@@ -1298,7 +1449,7 @@ for sheet_name in wb.sheetnames:
     if sheet_name != "Slot Info":
         for cell in ws[1]:# First row
             cell.fill = deep_blue_fill
-    if sheet_name not in ("Device Info", "Slot Info"):# Skip merging for "Device Info" sheet
+    if sheet_name not in ("Device Info", "Slot Info", "LOM"):# Skip merging for "Device Info" sheet
         for column in range(1,7):
             merge_cells_for_column(ws, column)
         for column in range(11,16):
