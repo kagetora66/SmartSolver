@@ -68,9 +68,9 @@ threshold_micron_ssd = {
 }
 #Part Numbers for SSD and HDD Disks (LOM prepration)
 partnums = [
-    {"Type": "HDD", "Interface": "SAS", "Size": "1.2 TB", "Describtion": "HPDS 1.2TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-1200"},
-    {"Type": "HDD", "Interface": "SAS", "Size": "1.8 TB", "Describtion": "HPDS 1.8TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-600"},
-    {"Type": "HDD", "Interface": "SAS", "Size": "2.4 TB", "Describtion": "HPDS 2.4TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-2400"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "1.20 TB", "Describtion": "HPDS 1.2TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-1200"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "1.80 TB", "Describtion": "HPDS 1.8TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-600"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "2.40 TB", "Describtion": "HPDS 2.4TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-2400"},
     {"Type": "HDD", "Interface": "SAS", "Size": "2.00 TB", "Describtion": "HPDS 2TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-2000"},
     {"Type": "HDD", "Interface": "SAS", "Size": "4.00 TB", "Describtion": "HPDS 4TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-4000"},
     {"Type": "HDD", "Interface": "SAS", "Size": "6.00 TB", "Describtion": "HPDS 6TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-6000"},
@@ -89,7 +89,14 @@ partnums = [
     {"Type": "SSD", "Interface": "SAS", "Size": "3.84 TB", "Describtion": "HPDS 3.8TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-3840"},
     {"Type": "SSD", "Interface": "SAS", "Size": "7.68 TB", "Describtion": "HPDS 7.6TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-7680"}
 ]
-
+partnums_card = [
+    {"Type": "FC", "Ports": 2, "Speed": "8Gb", "Describtion": "HPDS 8Gb 2-port PCIe Fiber Channel HBA", "Part Number": "PI-FM08G2P"},
+    {"Type": "FC", "Ports": 4, "Speed": "8Gb", "Describtion": "HPDS 8Gb 4-port PCIe Fiber Channel HBA", "Part Number": "PI-FM08G4P"},
+    {"Type": "FC", "Ports": 2, "Speed": "16Gb", "Describtion": "HPDS 16Gb 2-port PCIe Fiber Channel HBA", "Part Number": "PI-FM16G2P"},
+    {"Type": "FC", "Ports": 4, "Speed": "16Gb", "Describtion": "HPDS 16Gb 4-port PCIe Fiber Channel HBA", "Part Number": "PI-FM16G4P"},
+    {"Type": "NIC", "Ports": 4, "Speed": "1Gb", "Describtion": "HPDS 1Gb 4-port PCIe Ethernet Adapter", "Part Number": "PI-N1GT4P"},
+    {"Type": "NIC", "Ports": 2, "Speed": "10Gb", "Describtion": "HPDS 10Gb 2-port PCIe Ethernet Adapter", "Part Number": "PI-NT10G2P"}
+]
 smart_pattern = re.compile(
     r"(\d+)\s+([\w_]+)\s+0x[0-9a-fA-F]+\s+(\d+)\s+\d+\s+(\d+)\s+\w+-?\w*\s+\w+\s+-\s+(\d+)"
 )
@@ -847,8 +854,27 @@ def extract_host_info():
                     "Target Address": "-",
                     "Connection Type": "-"
                 })
+        #This part removes duplicate data sorted by target address
+        def get_key(d):
+            return tuple((k, v) for k, v in d.items() if k != "Target Address")
 
-        return host_data
+        # Group dictionaries by the key
+        grouped = defaultdict(list)
+        for item in host_data:
+            key = get_key(item)
+            grouped[key].append(item["Target Address"])
+
+        # Create merged dictionaries
+        merged = []
+        for key, target_addresses in grouped.items():
+            merged_dict = dict(key)
+            merged_dict["Target Address"] = target_addresses  # List of all target addresses
+            merged.append(merged_dict)
+        for item in merged:
+            if isinstance(item["Target Address"], list):
+                item["Target Address"] = ", ".join(item["Target Address"])
+
+        return merged
 
 
     except Exception as e:
@@ -1006,6 +1032,103 @@ def lom_disk(disk_dicts):
                     "Count": count
                 })
     return lom_disk_count
+#Extracts the data for fc ports
+def lom_cards():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
+
+    with open(sysinfo_file, "r") as file:
+        file_content = file.read()
+
+    card_types = [
+        {
+            "section": "FC Cards",
+            "label": "FC",
+            "pattern": r"(\d+):\d+\.\d+ Fibre Channel:\s+(.+)"
+        },
+        {
+            "section": "Network Cards",
+            "label": "NIC",
+            "pattern": r"(\d+):\d+\.\d+ Ethernet controller:\s+(.+)"
+        }
+    ]
+
+    result = []
+
+    for card_type in card_types:
+        section = card_type["section"]
+        label = card_type["label"]
+        pattern = re.compile(card_type["pattern"])
+
+        in_section = False
+        grouped = defaultdict(list)
+
+        for line in file_content.splitlines():
+            line = line.strip()
+            if line == section:
+                in_section = True
+                continue
+            elif in_section and line.startswith("-="):
+                break
+            elif in_section:
+                match = pattern.match(line)
+                if match:
+                    prefix = match.group(1)
+                    model = match.group(2)
+                    grouped[(prefix, model)].append(line)
+
+        for (prefix, model), lines in grouped.items():
+            result.append({
+                "port count": len(lines),
+                "Card": label,
+                "model": model
+            })
+
+    return result
+#Counts the FC/ISCSI ports from the output of lomfc_port
+def merge_duplicate_dicts(dict_list):
+    # Convert each dict into a hashable sorted tuple
+    hashed = [tuple(sorted(d.items())) for d in dict_list]
+
+    counts = Counter(hashed)
+
+    # Reconstruct merged dicts with 'count' added
+    result = []
+    for items, count in counts.items():
+        merged_dict = dict(items)
+        merged_dict["count"] = count
+        result.append(merged_dict)
+    return result
+#This part parses the information genereted by lom_ports into format suitable for LOM sheet
+def lom_card_parcer(cards):
+    lom_cards = []
+    for card in cards:
+        speed = 0
+        Type = card["Card"]
+        ports = card["port count"]
+        count = card["count"]
+        if "2261" in card.get("model", ""):
+            speed = "16Gb"
+        if "2071" in card.get("model", ""):
+            speed = "16Gb"
+        if "10GbE" in card.get("model", ""):
+            speed = "10Gb"
+        if "10-Gigabit" in card.get("model", ""):
+            speed = "10Gb"
+        if "Gigabit" in card.get("model", ""):
+            speed = "1Gb"
+        if "8Gb" in card.get("model", ""):
+            speed = "8Gb"
+        if "16Gb" in card.get("model", ""):
+            speed = "16Gb"
+        for part in partnums_card:
+            if ports != 1 and part["Type"] == Type and part["Ports"] == ports and part["Speed"] == speed:
+                lom_cards.append({
+                    "Describtion": part["Describtion"],
+                    "Part Number": part["Part Number"],
+                    "Count": count
+                })
+    return lom_cards
 #Extracts full_log using a RUST program
 def extractor():
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1078,13 +1201,16 @@ if hdd_data:
     hdd_lom = lom_disk(hdd_data)
 # Extract host information
 host_data = extract_host_info()
-#print(host_data)
 # Extract General Device Info
 sys_info = extract_sysinfo()
 # Extract enclosure/slot information
 serial_numbers = set([disk["Serial Number"] for disk in ssd_data + hdd_data if disk["Serial Number"] != "Unknown"])
 enclosure_slot_data = extract_enclosure_slot_info(storcli_content, serial_numbers)
-
+#lom for cards
+lom_cards_results = lom_cards()
+if lom_cards_results:
+   lom_cards_fixed = merge_duplicate_dicts(lom_cards_results)
+   lom_cards_final = lom_card_parcer(lom_cards_fixed)
 # Add enclosure/slot information to SSD and HDD data
 for disk in ssd_data + hdd_data:
     if disk["Serial Number"] in enclosure_slot_data:
@@ -1247,12 +1373,14 @@ with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
         df_host.to_excel(writer, sheet_name="General System Info", index=False)
     if slot_info:
         write_slot_info_sheet(writer, slot_info)
-    if ssd_lom or hdd_lom:
+    if ssd_lom or hdd_lom or lom_cards_final:
         dfs = []
         if ssd_lom:
             dfs.append(pd.DataFrame(ssd_lom))
         if hdd_lom:
             dfs.append(pd.DataFrame(hdd_lom))
+        if lom_cards_final:
+            dfs.append(pd.DataFrame(lom_cards_final))
         df_combined = pd.concat(dfs, ignore_index=True)
         df_combined.to_excel(writer, sheet_name="LOM", index=False)
 # Open the Excel file and format it
@@ -1344,7 +1472,7 @@ for sheet_name in wb.sheetnames:
     if sheet_name != "Slot Info":
         for cell in ws[1]:# First row
             cell.fill = deep_blue_fill
-    if sheet_name not in ("Device Info", "Slot Info"):# Skip merging for "Device Info" sheet
+    if sheet_name not in ("Device Info", "Slot Info", "LOM"):# Skip merging for "Device Info" sheet
         for column in range(1,7):
             merge_cells_for_column(ws, column)
         for column in range(11,16):
