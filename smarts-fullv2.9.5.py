@@ -79,7 +79,7 @@ partnums = [
     {"Type": "HDD", "Interface": "SATA", "Size": "1.94 TB", "Describtion": "HPDS 1.9TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-1900"},
     {"Type": "HDD", "Interface": "SATA", "Size": "3.84 TB", "Describtion": "HPDS 3.8TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-3800"},
     {"Type": "HDD", "Interface": "SATA", "Size": "7.68 TB", "Describtion": "HPDS 7.6TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-7600"},
-    {"Type": "HDD", "Interface": "SAS", "Size": "16.00 TB", "Describtion": "HPDS 16TB SAS 7.2K Enterprise HDD SX for SAB-HB", "Part Number": "DHBD-HS07SX-16000"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "16.0 TB", "Describtion": "HPDS 16TB SAS 7.2K Enterprise HDD SX for SAB-HB", "Part Number": "DHBD-HS07SX-16000"},
     {"Type": "SSD", "Interface": "SATA", "Size": "960 GB", "Describtion": "HPDS 960GB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-960"},
     {"Type": "SSD", "Interface": "SATA", "Size": "1.92 TB", "Describtion": "HPDS 1.9TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-1900"},
     {"Type": "SSD", "Interface": "SATA", "Size": "3.84 TB", "Describtion": "HPDS 3.8TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-3800"},
@@ -146,7 +146,8 @@ def extract_ssd_parameters(log_content):
                     "Elements in grown defect list": str(Element_in_defect_threshold),
                     "Total Uncorrected Errors": str(total_uncorrrected_threshold),
                     "Accumulated start-stop cycles": "10000",
-                    "Accumulated load-unload cycles": "300000"
+                    "Accumulated load-unload cycles": "300000",
+                    "SS Media used endurance indicator %": "90"
                     }
                 hdd_values = [
                     ("Elements in grown defect list", elements_grown_defect),
@@ -1114,14 +1115,13 @@ def lom_card_parcer(cards):
         if "10GbE" in card.get("model", ""):
             speed = "10Gb"
         if "10-Gigabit" in card.get("model", ""):
-            speed = "10Gb"
-        if "Gigabit" in card.get("model", ""):
+            print(speed)
+        elif "Gigabit" in card.get("model", ""):
             speed = "1Gb"
         if "8Gb" in card.get("model", ""):
             speed = "8Gb"
         if "16Gb" in card.get("model", ""):
             speed = "16Gb"
-        for part in partnums_card:
             if ports != 1 and part["Type"] == Type and part["Ports"] == ports and part["Speed"] == speed:
                 lom_cards.append({
                     "Describtion": part["Describtion"],
