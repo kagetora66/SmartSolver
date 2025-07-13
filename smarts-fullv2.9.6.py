@@ -1115,13 +1115,14 @@ def lom_card_parcer(cards):
         if "10GbE" in card.get("model", ""):
             speed = "10Gb"
         if "10-Gigabit" in card.get("model", ""):
-            print(speed)
+            speed = "10Gb"
         elif "Gigabit" in card.get("model", ""):
             speed = "1Gb"
         if "8Gb" in card.get("model", ""):
             speed = "8Gb"
         if "16Gb" in card.get("model", ""):
             speed = "16Gb"
+        for part in partnums_card:
             if ports != 1 and part["Type"] == Type and part["Ports"] == ports and part["Speed"] == speed:
                 lom_cards.append({
                     "Describtion": part["Describtion"],
