@@ -1,4 +1,4 @@
-#By Safari, HPDS Tech Support
+#By HPDS Tech Support
 #===========ooOoo============
 #
 import re
@@ -497,7 +497,7 @@ def extract_hdd_parameters(log_content):
     return data
 
 # Function to extract HDD device info (only if both values are found)
-def extract_device_info(log_content):
+def extract_device_info(log_content, enclosure):
     data = []
     disk_blocks = re.findall(r"=== START OF INFORMATION SECTION ===(.*?)(?==== START OF INFORMATION SECTION ===|\Z)", log_content, re.DOTALL)
     tmp_data = []
@@ -513,16 +513,21 @@ def extract_device_info(log_content):
          hours_match_sam = re.search(r"9\s+[\w_]+\s+[\w\d]+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+-\s+(\d+)", block)
          if serial_number and temp_match:
              temperature = f"{temp_match.group(1)}"
+             for enc in enclosure:
+                 if serial_number == enc["Serial Number"]:
+                     slot = enc["En/Slot"]
              if hours_match:                
                  hours = hours_match.group(1)
                  tmp_data.append({
-                     "Device": serial_number,
+                     "Enc/Slot": slot,
+                     "Serial Number": serial_number,
                      "Temperature": temperature,
                      "Powered Up Hours": hours
                  })
              else:
                 data.append({
-                     "Device": serial_number,
+                     "Enc/Slot": slot,
+                     "Serial Number": serial_number,
                      "Temperature": temperature,
                  })
          elif serial_number and temp_match_sam:
@@ -530,7 +535,8 @@ def extract_device_info(log_content):
              if hours_match_sam:
                  hours = hours_match_sam.group(1)
              data.append({
-                 "Device": serial_number,
+                 "Enc/Slot": slot,
+                 "Serial Number": serial_number,
                  "Temperature": temperature,
                  "Powered Up Hours": hours
                  })
@@ -855,26 +861,30 @@ def extract_host_info():
                     "Target Address": "-",
                     "Connection Type": "-"
                 })
-        #This part removes duplicate data sorted by target address
+
+        # Remove duplicates and group by all keys except "Target Address"
         def get_key(d):
             return tuple((k, v) for k, v in d.items() if k != "Target Address")
 
-        # Group dictionaries by the key
         grouped = defaultdict(list)
         for item in host_data:
             key = get_key(item)
             grouped[key].append(item["Target Address"])
-
-        # Create merged dictionaries
         merged = []
         for key, target_addresses in grouped.items():
+            # Convert the key back to an OrderedDict to control key order
             merged_dict = dict(key)
-            merged_dict["Target Address"] = target_addresses  # List of all target addresses
-            merged.append(merged_dict)
-        for item in merged:
-            if isinstance(item["Target Address"], list):
-                item["Target Address"] = ", ".join(item["Target Address"])
-
+            # Insert "Target Address" at the second-to-last position
+            keys = list(merged_dict.keys())
+            merged_dict["Target Address"] = ", ".join(target_addresses)  # Join addresses
+            # Rebuild the dictionary with "Target Address" in the desired position
+            new_dict = {}
+            for k in keys[:-2]:  # Copy all keys except the last
+                new_dict[k] = merged_dict[k]
+            new_dict["Target Address"] = merged_dict["Target Address"]  # Insert here
+            if keys:  # Add the last key if it exists
+                new_dict[keys[-2]] = merged_dict[keys[-2]]
+            merged.append(new_dict)
         return merged
 
 
@@ -1190,10 +1200,7 @@ except FileNotFoundError:
 # Extract SSD, HDD, and device info data
 ssd_data = extract_ssd_parameters(smarts_content)
 # Check if OS disks are present
-
-
 hdd_data = extract_hdd_parameters(smarts_content)
-device_data = extract_device_info(smarts_content)
 ssd_lom = []
 hdd_lom = []
 if ssd_data:
@@ -1236,6 +1243,9 @@ if not is_os:
         for disk in ssd_os:
             disk["En/Slot"] = "Not in RC"
         ssd_data.extend(ssd_os)
+#Merge both ssd and hdd data for SMART
+diskdata = hdd_data + ssd_data
+device_data = extract_device_info(smarts_content, diskdata)
 
 def write_slot_info_sheet(writer, slot_data):
     wb = writer.book
