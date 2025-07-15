@@ -1,6 +1,6 @@
 #By HPDS Tech Support
 #===========ooOoo============
-#
+from datetime import datetime
 import re
 import pandas as pd
 from openpyxl import load_workbook
@@ -241,6 +241,7 @@ def extract_ssd_parameters(log_content):
                             "Value": "-",
                             "Raw Value": f"{total_size_written_tb:.2f}"
                         })
+
                 else:
                     brand = "SAMSUNG"
                     disk_type = "SSD SATA"
@@ -264,29 +265,45 @@ def extract_ssd_parameters(log_content):
                                 "Value": value,
                                 "Raw Value": raw_value
                             })
+                        if attr_name == "Wear_Leveling_Count":
+                            wearlevel = raw_value
                     if total_lba_written is not None:
                         total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024
                         if "MZ" in device_model:
                             threshold_samsung_write = round(365 * 5 * user_capacity * 4, -3)
                         elif "850" in device_model:
                             threshold_samsung_write = 150
+                            user_capacity = 0.4
                         elif "860" in device_model:
                             threshold_samsung_write = 300
+                            user_capacity = 0.4
                         elif "870" in device_model:
                             threshold_samsung_write = 150
+                            user_capacity = 0.4
                         else:
                             threshold_samsung_write = 300 #undefined
-                            ther
                         data.append({
                             "Brand": brand,
                             "Device Model": device_model,
                             "Serial Number": serial_number,
                             "Interface": disk_type,
                             "Size": tb_value,
-                            "Parameter": "Total Size Written (TB)",
+                            "Parameter": "Total Size Written (TB)- Host",
                             "Threshold": str(threshold_samsung_write),
                             "Value": "-",
                             "Raw Value": f"{total_size_written_tb:.2f}"
+                        })
+                        total_size_written_ssd = float(wearlevel) * user_capacity
+                        data.append({
+                            "Brand": brand,
+                            "Device Model": device_model,
+                            "Serial Number": serial_number,
+                            "Interface": disk_type,
+                            "Size": tb_value,
+                            "Parameter": "Total Size Written (TB)-SSD_Ctl",
+                            "Threshold": str(round(threshold_samsung_write, -2)),
+                            "Value": "-",
+                            "Raw Value": f"{total_size_written_ssd:.2f}"
                         })
             
             # Add an empty row after each disk's data for readability.
@@ -511,34 +528,53 @@ def extract_device_info(log_content, enclosure):
          temp_match_sam = re.search(r"194\s+[\w_]+\s+[\w\d]+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+-\s+(\d+)", block)
          if not temp_match_sam: temp_match_sam = re.search(r"190\s+[\w_]+\s+[\w\d]+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+-\s+(\d+)", block) 
          hours_match_sam = re.search(r"9\s+[\w_]+\s+[\w\d]+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+-\s+(\d+)", block)
-         if serial_number and temp_match:
-             temperature = f"{temp_match.group(1)}"
+         if serial_number:
+             if temp_match:
+                 temperature = f"{temp_match.group(1)}"
+             else:
+                 temperature = "-"
              for enc in enclosure:
                  if serial_number == enc["Serial Number"]:
                      slot = enc["En/Slot"]
+                     model = enc["Device Model"]
+                     if enc["Parameter"] == "Total Size Written (TB)":
+                         tsw = enc["Raw Value"]
+                     elif enc["Parameter"] == "Total Size Written (TB)- Host":
+                         tsw = enc["Raw Value"]
+                     elif enc["Parameter"] == "Total Size Written (TB)-SSD_Ctl":
+                         tsw_ctl = enc["Raw Value"]
+                     else:
+                         tsw = "-"
+                         tsw_ctl = "-"
              if hours_match:                
                  hours = hours_match.group(1)
-                 tmp_data.append({
-                     "Enc/Slot": slot,
-                     "Serial Number": serial_number,
-                     "Temperature": temperature,
-                     "Powered Up Hours": hours
-                 })
              else:
-                data.append({
-                     "Enc/Slot": slot,
-                     "Serial Number": serial_number,
-                     "Temperature": temperature,
-                 })
-         elif serial_number and temp_match_sam:
-             temperature = f"{temp_match_sam.group(1)}"
+                 hours = "-"
+             tmp_data.append({
+                "Enc/Slot": slot,
+                "Model": model,
+                "Serial Number": serial_number,
+                "Temperature": temperature,
+                "Powered Up Hours": hours,
+                "TSW (Host)": tsw,
+                "TSW (Ctl)": tsw_ctl
+                })
+
+         elif serial_number:
+             if temp_match_sam:
+                temperature = f"{temp_match_sam.group(1)}"
+             else:
+                temperature = "-"
              if hours_match_sam:
                  hours = hours_match_sam.group(1)
              data.append({
                  "Enc/Slot": slot,
+                 "Model": model,
                  "Serial Number": serial_number,
                  "Temperature": temperature,
-                 "Powered Up Hours": hours
+                 "Powered Up Hours": hours,
+                 "TSW_Host": tsw,
+                 "TSW (Ctl)": tsw_ctl
                  })
 
     data.extend(tmp_data)
@@ -642,7 +678,13 @@ def extract_sysinfo():
                     "CV Temp": re.search(r'Temperature\s*([^\s]+)', content),
                     "BBU Status": re.search(r'BBU Status =\s*([^\s]+)', content)
                 } 
-
+        #If pmc file does not include desired values
+            if basic_info["UI Version"] == None:
+                with open(version_file, "r") as file:
+                    content = file.read()
+                    basic_info = {
+                        "UI Version": re.search(r'UI Version:\s*([\d.]+)', content)
+                    }
         else:
             # Extract versions from version file
             with open(version_file, "r") as file:
@@ -1176,6 +1218,72 @@ def extractor():
 # Reorder columns to make "Enclosure/Slot" the first column
 def reorder_columns(data):
     return [{"En/Slot": disk.get("En/Slot", "N/A"), **disk} for disk in data]
+def get_date():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
+    try:
+        with open(sysinfo_file, 'r') as file:
+            content = file.read()
+
+            # Search for the time pattern
+            match = re.search(r'Time\s+(\d{4}/\d{2}/\d{2})', content)
+
+            if match:
+                original_date = match.group(1)
+                return original_date
+            else:
+                #return time of system
+                now = datetime.now()
+                formatted_date = now.strftime("%Y/%m/%d")
+                return formatted_date
+
+    except FileNotFoundError:
+        print(f"Error: File {file_path} not found")
+        return None
+    except Exception as e:
+        print(f"Error processing file: {e}")
+        return None
+def parse_date(date_str):
+    """Convert 'YYYY/MM/DD' string into year, month, day integers"""
+    year, month, day = map(int, date_str.split('/'))
+    return year, month, day
+#Convert date from Gregorian to Jalali
+def convertdate(year, month, day):
+    result =  dict()
+    array = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
+    if year <= 1600:
+        year -= 621
+        result["year"] = 0
+    else :
+        year -= 1600
+        result["year"] = 979
+    temp = year + 1 if year > 2 else year
+    days = (int((int((temp + 3) / 4)))) + (365 * year) - (int((int((temp + 99) / 100)))) - 80 + array[month - 1] + (int((int((temp + 399) / 400)))) + day
+    result["year"] = result.get("year") + 33 * (int((int(days / 12053))))
+    days %= 12053
+    result["year"] = result.get("year") + 4 * (int((int(days / 1461))))
+    days %= 1461
+    if days > 365:
+        result["year"] = result.get("year") + int((int((days - 1) / 365)))
+        days = (days - 1) % 365
+    result["month"] = 1 + int((int(days / 31))) if (days < 186) else 7 + int((int((days - 186) / 30)))
+    result["day"] = 1 + ((days % 31) if (days < 186) else ((days - 186) % 30))
+    jalalidate = str(result.get("year")) + "_" + str(result.get("month")) + "_" + str(result.get("day"))
+    return jalalidate
+def get_ID():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    log_files = glob.glob(os.path.join(script_dir, "full_log*"))
+    log_file = log_files[0]
+    match = re.search(r'full_log(.+?)_(\d{4}-\d{2}-\d{2})', log_file)
+    if match:
+        ID = match.group(1)
+        return ID
+    else:
+        return None
+
+def output_name(ID, Date):
+    return "smart" + "-"+ ID + "_" + Date + ".xlsx"
+
 #Extract files
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isfile(os.path.join(script_dir, 'version')):
@@ -1186,6 +1294,11 @@ target_data = extract_host_info()
 
 # Path to the storcli-Sall-show-all.mylinux file in the /SystemOverallInfo directory
 storcli_file_path = os.path.join(script_dir, "SystemOverallInfo", "storcli-Sall-show-all.mylinux")
+#Setting the output name
+log_date = get_date()
+year, month, day = parse_date(log_date)
+jalalidate = convertdate(year, month, day)
+ID = get_ID()
 
 # Read the log files
 try:
@@ -1353,9 +1466,10 @@ hdd_data = reorder_columns(hdd_data)
 # Remove rows where "Enclosure/Slot" is "N/A"
 ssd_data = [disk for disk in ssd_data]
 hdd_data = [disk for disk in hdd_data]
-
+#Create output name
+output = output_name(ID, jalalidate)
 # Create an Excel writer
-excel_path = 'smart_data.xlsx'
+excel_path = output
 #Create slot info
 slot_info = extract_slot_port_info()
 
@@ -1495,5 +1609,5 @@ if "Host Info" in wb.sheetnames:
     merge_cells_for_column(host_info_sheet, 5)  # Merge "Targets" column (column 5) 
     merge_cells_for_column(host_info_sheet, 6)  # Merge "Connection type" column (column 6) 
 wb.save(excel_path)
-print("SMART data, device info, and host info extracted and written to smart_data.xlsx with proper formatting.")
+print("SMART data, device info, and host info extracted and written to the Excel file with proper formatting.")
 Path("python_done.flag").touch()
