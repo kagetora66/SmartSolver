@@ -929,27 +929,35 @@ def extract_host_info():
                 })
 
         # Remove duplicates and group by all keys except "Target Address"
-        def get_key(d):
+        def get_group_key(d):
             return tuple((k, v) for k, v in d.items() if k != "Target Address")
-
         grouped = defaultdict(list)
         for item in host_data:
-            key = get_key(item)
+            key = get_group_key(item)
             grouped[key].append(item["Target Address"])
+
+        # Merging with controlled key order
         merged = []
-        for key, target_addresses in grouped.items():
-            # Convert the key back to an OrderedDict to control key order
-            merged_dict = dict(key)
-            # Insert "Target Address" at the second-to-last position
-            keys = list(merged_dict.keys())
-            merged_dict["Target Address"] = ", ".join(target_addresses)  # Join addresses
-            # Rebuild the dictionary with "Target Address" in the desired position
-            new_dict = {}
-            for k in keys[:-2]:  # Copy all keys except the last
-                new_dict[k] = merged_dict[k]
-            new_dict["Target Address"] = merged_dict["Target Address"]  # Insert here
-            if keys:  # Add the last key if it exists
-                new_dict[keys[-2]] = merged_dict[keys[-2]]
+        for key, addresses in grouped.items():
+            # Rebuild original dict (without Target Address)
+            new_dict = dict(key)
+
+            # Get all keys except "Target Address"
+            original_keys = list(new_dict.keys())
+
+            # Insert "Target Address" before the last key
+            if len(original_keys) >= 1:
+                last_key = original_keys[-1]
+                # Remove last key temporarily
+                last_value = new_dict.pop(last_key)
+                # Add Target Address
+                new_dict["Target Address"] = ", ".join(addresses)
+                # Restore last key
+                new_dict[last_key] = last_value
+            else:
+                # Edge case: only "Target Address" existed
+                new_dict["Target Address"] = ", ".join(addresses)
+
             merged.append(new_dict)
         return merged
 
