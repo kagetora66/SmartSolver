@@ -10,9 +10,13 @@ use std::sync::mpsc;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Extract files
     let zip_path = find_zip_file()?;
-    let password = rpassword::prompt_password("Enter password: ")?;
-    let mut extracted_files = extract_zip(&zip_path, Some(&password))?;
-    
+    let mut extracted_files = loop {
+        let password = rpassword::prompt_password("Enter password: ")?;
+        match extract_zip(&zip_path, Some(&password)) {
+            Ok(path) => break path,
+            Err(_) => println!("Please type the password again"),
+        }
+    };
     let other_zips = find_other_zips()?;
     for zip in other_zips {
         let mut new_files = extract_zip(&zip, None)?;
@@ -29,23 +33,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     extracted_files.push(log_path);
     let (tx, rx) = std::sync::mpsc::channel();
 
-    let handle = std::thread::spawn(move || {
-        let result = wait_for_signal_and_cleanup(extracted_files);
-        tx.send(result).expect("Failed to send cleanup status");
-    });
+    let result = wait_for_signal_and_cleanup(extracted_files);
+    tx.send(result).expect("Failed to send cleanup status");
 
-    // Wait for cleanup completion or timeout
-    match rx.recv_timeout(Duration::from_secs(300)) { // 5-minute timeout
-        Ok(result) => {
-            handle.join().unwrap();
-            result?;
-            println!("Cleanup complete - exiting");
-        }
-        Err(_) => {
-            eprintln!("Cleanup timeout reached");
-            std::process::exit(1);
-        }
-    }
 
     Ok(())
 }
@@ -130,21 +120,21 @@ pub fn extract_zip(
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .contains("full_log")
-    {
-        let _ = File::create("extracted_confirm")?;
-    }
-    
-    Ok(extracted_paths)
+        {
+            let _ = File::create("extracted_confirm")?;
+        }
+
+        Ok(extracted_paths)
 }
 fn sanitize_windows_path(path: &Path) -> PathBuf {
     let mut sanitized = PathBuf::new();
     for component in path.components() {
         if let Some(s) = component.as_os_str().to_str() {
-            let cleaned = s.replace(|c: char| 
-                c == '<' || c == '>' || c == ':' || 
-                c == '"' || c == '/' || c == '\\' || 
-                c == '|' || c == '?' || c == '*',
-                "_"
+            let cleaned = s.replace(|c: char|
+            c == '<' || c == '>' || c == ':' ||
+            c == '"' || c == '/' || c == '\\' ||
+            c == '|' || c == '?' || c == '*',
+            "_"
             );
             sanitized.push(cleaned);
         }
@@ -172,25 +162,25 @@ fn wait_for_signal_and_cleanup(extracted_files: Vec<PathBuf>) -> io::Result<()> 
     loop {
         if user_confirm.exists() {
             println!("Starting cleanup...");
-           for path in paths {
-            if path.exists() {
-                if path.is_dir() {
-                    fs::remove_dir_all(&path)?;
-                } else {
-                    fs::remove_file(&path)?;
+            for path in paths {
+                if path.exists() {
+                    if path.is_dir() {
+                        fs::remove_dir_all(&path)?;
+                    } else {
+                        fs::remove_file(&path)?;
+                    }
                 }
             }
-        }
             fs::remove_file(&user_confirm)?;
             fs::remove_file(&python_done)?;
-            fs::remove_file(&confirm)?;            
+            fs::remove_file(&confirm)?;
             break;
         }
         else if user_cancel.exists() {
             println!("Cleanup cancelled by user");
             fs::remove_file(&user_cancel)?;
             fs::remove_file(&python_done)?;
-            fs::remove_file(&confirm)?;            
+            fs::remove_file(&confirm)?;
             break;
         }
         thread::sleep(Duration::from_secs(1));

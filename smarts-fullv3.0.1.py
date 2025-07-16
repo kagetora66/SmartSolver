@@ -305,6 +305,30 @@ def extract_ssd_parameters(log_content):
                             "Value": "-",
                             "Raw Value": f"{total_size_written_ssd:.2f}"
                         })
+                        total_size_samsung_waf2 = total_size_written_tb * 2
+                        data.append({
+                            "Brand": brand,
+                            "Device Model": device_model,
+                            "Serial Number": serial_number,
+                            "Interface": disk_type,
+                            "Size": tb_value,
+                            "Parameter": "Total Size Written (TB)-WAF(2)",
+                            "Threshold": str(round(threshold_samsung_write, -2)),
+                            "Value": "-",
+                            "Raw Value": f"{total_size_samsung_waf2:.2f}"
+                        })
+                        total_size_samsung_waf4 = total_size_written_tb * 4
+                        data.append({
+                            "Brand": brand,
+                            "Device Model": device_model,
+                            "Serial Number": serial_number,
+                            "Interface": disk_type,
+                            "Size": tb_value,
+                            "Parameter": "Total Size Written (TB)-WAF(4)",
+                            "Threshold": str(round(threshold_samsung_write, -2)),
+                            "Value": "-",
+                            "Raw Value": f"{total_size_samsung_waf4:.2f}"
+                        })
             
             # Add an empty row after each disk's data for readability.
             data.append({
@@ -1512,6 +1536,7 @@ with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
 wb = load_workbook(excel_path)
 yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 orange_fill = PatternFill(start_color="FFA500", end_color="FFFF00", fill_type="solid")
+red_fill = PatternFill(start_color="de0a0a", end_color="FFFF00", fill_type="solid")
 #Colour cells based on thresholds
 if "SMART Data" in wb.sheetnames:
     ws = wb["SMART Data"]
@@ -1520,10 +1545,12 @@ if "SMART Data" in wb.sheetnames:
         threshold_cell = row[7]  # Column H (Threshold)
         value_cell = row[8]      # Column I (Value)
         raw_value_cell = row[9]  # Column J (Raw Value)
-        
+
         threshold_str = threshold_cell.value
         value_str = value_cell.value
         raw_value_str = raw_value_cell.value
+        if threshold_str:
+            threshold_value = float(threshold_str)
         # Skip rows with missing/invalid thresholds
         if not threshold_str or threshold_str == "-":
             continue
@@ -1542,10 +1569,10 @@ if "SMART Data" in wb.sheetnames:
                 #To avoid colouring cells when value is 100
                 if compare_value == 100:
                     compare_value = 200
-                    
+
             except (ValueError, TypeError):
                 pass
-        
+
         if compare_value is None:  # Fallback to Raw Value
             if raw_value_str not in (None, "-", ""):
                 try:
@@ -1553,6 +1580,7 @@ if "SMART Data" in wb.sheetnames:
                     threshold_caution = float(threshold_str) * -0.8
                     threshold_warning = float(threshold_str) * -0.9
                     compare_value = float(raw_value_str) * -1
+                    threshold_value = threshold_value * -1
                    # print(threshold_warning)
                 except (ValueError, TypeError):
                     continue  # Skip invalid values
@@ -1560,7 +1588,9 @@ if "SMART Data" in wb.sheetnames:
                 continue
 
         # Highlight if value < threshold
-        if compare_value <= threshold_warning:
+        if compare_value <= threshold_value:
+            raw_value_cell.fill = red_fill
+        elif compare_value <= threshold_warning:
             raw_value_cell.fill = orange_fill
         elif compare_value <= threshold_caution:
             raw_value_cell.fill = yellow_fill
