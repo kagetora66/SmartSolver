@@ -288,7 +288,7 @@ def extract_ssd_parameters(log_content):
                             "Serial Number": serial_number,
                             "Interface": disk_type,
                             "Size": tb_value,
-                            "Parameter": "Total Size Written (TB)- Host",
+                            "Parameter": "Total Size Written (TB)",
                             "Threshold": str(threshold_samsung_write),
                             "Value": "-",
                             "Raw Value": f"{total_size_written_tb:.2f}"
@@ -386,6 +386,8 @@ def extract_hdd_parameters(log_content):
                 brand = "SEAGATE"
             elif device_model.startswith("TOSHIBA"):
                 brand = "Toshiba"
+            else:
+                brand = "HP"
 
   
             elements_grown_defect = re.search(r"Elements in grown defect list:\s+(\d+)", block)
@@ -552,6 +554,10 @@ def extract_device_info(log_content, enclosure):
          temp_match_sam = re.search(r"194\s+[\w_]+\s+[\w\d]+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+-\s+(\d+)", block)
          if not temp_match_sam: temp_match_sam = re.search(r"190\s+[\w_]+\s+[\w\d]+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+-\s+(\d+)", block) 
          hours_match_sam = re.search(r"9\s+[\w_]+\s+[\w\d]+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+-\s+(\d+)", block)
+         tsw = "-"
+         tsw_ctl = "-"
+         hours = "-"
+
          if serial_number:
              if temp_match:
                  temperature = f"{temp_match.group(1)}"
@@ -563,25 +569,20 @@ def extract_device_info(log_content, enclosure):
                      model = enc["Device Model"]
                      if enc["Parameter"] == "Total Size Written (TB)":
                          tsw = enc["Raw Value"]
-                     elif enc["Parameter"] == "Total Size Written (TB)- Host":
-                         tsw = enc["Raw Value"]
                      elif enc["Parameter"] == "Total Size Written (TB)-SSD_Ctl":
                          tsw_ctl = enc["Raw Value"]
-                     else:
-                         tsw = "-"
-                         tsw_ctl = "-"
-             if hours_match:                
+                     if enc["Parameter"] == "Power_On_Hours":
+                         hours = enc["Raw Value"]
+             if hours_match:
                  hours = hours_match.group(1)
-             else:
-                 hours = "-"
              tmp_data.append({
                 "Enc/Slot": slot,
                 "Model": model,
                 "Serial Number": serial_number,
                 "Temperature": temperature,
                 "Powered Up Hours": hours,
-                "TSW (Host)": tsw,
-                "TSW (Ctl)": tsw_ctl
+                "TBW": tsw,
+                "TBW (Ctl)": tsw_ctl
                 })
 
          elif serial_number:
@@ -597,8 +598,8 @@ def extract_device_info(log_content, enclosure):
                  "Serial Number": serial_number,
                  "Temperature": temperature,
                  "Powered Up Hours": hours,
-                 "TSW_Host": tsw,
-                 "TSW (Ctl)": tsw_ctl
+                 "TBW": tsw,
+                 "TBW (Ctl)": tsw_ctl
                  })
 
     data.extend(tmp_data)
@@ -948,15 +949,18 @@ def extract_host_info():
             # Insert "Target Address" before the last key
             if len(original_keys) >= 1:
                 last_key = original_keys[-1]
+                init_key = original_keys[3]
                 # Remove last key temporarily
                 last_value = new_dict.pop(last_key)
+                init_value = new_dict.pop(init_key)
                 # Add Target Address
-                new_dict["Target Address"] = ", ".join(addresses)
+                new_dict["Target Address"] = "__ ".join(addresses)
                 # Restore last key
+                new_dict[init_key] = init_value
                 new_dict[last_key] = last_value
             else:
                 # Edge case: only "Target Address" existed
-                new_dict["Target Address"] = ", ".join(addresses)
+                new_dict["Target Address"] = "__ ".join(addresses)
 
             merged.append(new_dict)
         return merged
