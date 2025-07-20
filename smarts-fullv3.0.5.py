@@ -226,8 +226,20 @@ def extract_ssd_parameters(log_content):
                                 "Value": value,
                                 "Raw Value": raw_value
                             })
-                            
+                        elif attr_id.strip() == "202":
+                            data.append({
+                                "Brand": brand,
+                                "Device Model": device_model,
+                                "Serial Number": serial_number,
+                                "Interface": disk_type,
+                                "Size": tb_value,
+                                "Parameter": "Percent Life Time Remaining",
+                                "Threshold": threshold,
+                                "Value": value,
+                                "Raw Value": raw_value
+                            })
                     if total_lba_written is not None:
+
                         total_size_written_tb = total_lba_written / 2 / 1024 / 1024 / 1024
                         threshold_write_micron = 365 * 0.8 * 5 * user_capacity
                         data.append({
@@ -240,6 +252,32 @@ def extract_ssd_parameters(log_content):
                             "Threshold": str(round(threshold_write_micron, -3)),
                             "Value": "-",
                             "Raw Value": f"{total_size_written_tb:.2f}"
+                        })
+                        total_size_written_ssd = float(wearlevel) * user_capacity
+
+                        total_size_micron_waf2 = total_size_written_tb * 2
+                        data.append({
+                            "Brand": brand,
+                            "Device Model": device_model,
+                            "Serial Number": serial_number,
+                            "Interface": disk_type,
+                            "Size": tb_value,
+                            "Parameter": "Total Size Written (TB)-WAF(2)",
+                            "Threshold": str(round(threshold_write_micron, -1)),
+                            "Value": "-",
+                            "Raw Value": f"{total_size_micron_waf2:.2f}"
+                        })
+                        total_size_micron_waf4 = total_size_written_tb * 4
+                        data.append({
+                            "Brand": brand,
+                            "Device Model": device_model,
+                            "Serial Number": serial_number,
+                            "Interface": disk_type,
+                            "Size": tb_value,
+                            "Parameter": "Total Size Written (TB)-WAF(4)",
+                            "Threshold": str(round(threshold_write_micron, -1)),
+                            "Value": "-",
+                            "Raw Value": f"{total_size_micron_waf4:.2f}"
                         })
 
                 else:
@@ -294,17 +332,6 @@ def extract_ssd_parameters(log_content):
                             "Raw Value": f"{total_size_written_tb:.2f}"
                         })
                         total_size_written_ssd = float(wearlevel) * user_capacity
-                        data.append({
-                            "Brand": brand,
-                            "Device Model": device_model,
-                            "Serial Number": serial_number,
-                            "Interface": disk_type,
-                            "Size": tb_value,
-                            "Parameter": "Total Size Written (TB)-SSD_Ctl",
-                            "Threshold": str(round(threshold_samsung_write, -2)),
-                            "Value": "-",
-                            "Raw Value": f"{total_size_written_ssd:.2f}"
-                        })
                         total_size_samsung_waf2 = total_size_written_tb * 2
                         data.append({
                             "Brand": brand,
@@ -329,7 +356,17 @@ def extract_ssd_parameters(log_content):
                             "Value": "-",
                             "Raw Value": f"{total_size_samsung_waf4:.2f}"
                         })
-            
+                        data.append({
+                            "Brand": brand,
+                            "Device Model": device_model,
+                            "Serial Number": serial_number,
+                            "Interface": disk_type,
+                            "Size": tb_value,
+                            "Parameter": "Total Size Written (TB)-SSD_Ctl",
+                            "Threshold": str(round(threshold_samsung_write, -2)),
+                            "Value": "-",
+                            "Raw Value": f"{total_size_written_ssd:.2f}"
+                        })
             # Add an empty row after each disk's data for readability.
             data.append({
                 "Brand": "",
@@ -557,22 +594,29 @@ def extract_device_info(log_content, enclosure):
          tsw = "-"
          tsw_ctl = "-"
          hours = "-"
-
+         tsw_waf2 = 0
+         tsw_waf4 = 0
+         percent_life = "-"
          if serial_number:
              if temp_match:
                  temperature = f"{temp_match.group(1)}"
              else:
                  temperature = "-"
+
              for enc in enclosure:
                  if serial_number == enc["Serial Number"]:
                      slot = enc["En/Slot"]
                      model = enc["Device Model"]
                      if enc["Parameter"] == "Total Size Written (TB)":
                          tsw = enc["Raw Value"]
+                         tsw_waf2 = float(tsw) * 2
+                         tsw_waf4 = float(tsw) * 4
                      elif enc["Parameter"] == "Total Size Written (TB)-SSD_Ctl":
                          tsw_ctl = enc["Raw Value"]
                      if enc["Parameter"] == "Power_On_Hours":
                          hours = enc["Raw Value"]
+                     if enc["Parameter"] == "Percent Life Time Remaining":
+                         percent_life = enc["Raw Value"]
              if hours_match:
                  hours = hours_match.group(1)
              tmp_data.append({
@@ -582,7 +626,10 @@ def extract_device_info(log_content, enclosure):
                 "Temperature": temperature,
                 "Powered Up Hours": hours,
                 "TBW": tsw,
-                "TBW (Ctl)": tsw_ctl
+                "TBW-WAF2": tsw_waf2,
+                "TBW-WAF4": tsw_waf4,
+                "TBW (Ctl)": tsw_ctl,
+                "Percent Life": percent_life
                 })
 
          elif serial_number:
@@ -599,7 +646,10 @@ def extract_device_info(log_content, enclosure):
                  "Temperature": temperature,
                  "Powered Up Hours": hours,
                  "TBW": tsw,
-                 "TBW (Ctl)": tsw_ctl
+                 "TBW-WAF2": tsw_waf2,
+                 "TBW-WAF4": tsw_waf4,
+                 "TBW (Ctl)": tsw_ctl,
+                 "Percent Life": percent_life
                  })
 
     data.extend(tmp_data)
@@ -1315,7 +1365,7 @@ def get_ID():
         ID = match.group(1)
         return ID
     else:
-        return None
+        return " "
 
 def output_name(ID, Date):
     return "smart" + "-"+ ID + "_" + Date + ".xlsx"
@@ -1549,6 +1599,7 @@ wb = load_workbook(excel_path)
 yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 orange_fill = PatternFill(start_color="FFA500", end_color="FFFF00", fill_type="solid")
 red_fill = PatternFill(start_color="de0a0a", end_color="FFFF00", fill_type="solid")
+purple_fill = PatternFill(start_color="ffc2fe", end_color="ffc2fe", fill_type="solid")
 #Colour cells based on thresholds
 if "SMART Data" in wb.sheetnames:
     ws = wb["SMART Data"]
@@ -1557,10 +1608,16 @@ if "SMART Data" in wb.sheetnames:
         threshold_cell = row[7]  # Column H (Threshold)
         value_cell = row[8]      # Column I (Value)
         raw_value_cell = row[9]  # Column J (Raw Value)
+        param_value_cell = row[6]
 
+        param_str = param_value_cell.value
         threshold_str = threshold_cell.value
         value_str = value_cell.value
         raw_value_str = raw_value_cell.value
+        #Temporarily we color this parameter differently for ssd disks
+        is_unused_rsvd = False
+        if param_str == "Unused_Rsvd_Blk_Cnt_Tot":
+            is_unused_rsvd = True
         if threshold_str:
             threshold_value = float(threshold_str)
         # Skip rows with missing/invalid thresholds
@@ -1606,6 +1663,9 @@ if "SMART Data" in wb.sheetnames:
             raw_value_cell.fill = orange_fill
         elif compare_value <= threshold_caution:
             raw_value_cell.fill = yellow_fill
+        if is_unused_rsvd:
+            raw_value_cell.fill = purple_fill
+
 # Function to merge cells for a specific column
 def merge_cells_for_column(ws, col_idx):
     prev_value = None
