@@ -19,8 +19,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let other_zips = find_other_zips()?;
     for zip in other_zips {
+        if zip.file_name().unwrap() == extracted_files[0] {
         let mut new_files = extract_zip(&zip, None)?;
         extracted_files.append(&mut new_files);
+        }
     }
 
     // Write paths to cleanup log
