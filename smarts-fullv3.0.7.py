@@ -1361,9 +1361,13 @@ def convertdate(year, month, day):
     return jalalidate
 def get_ID():
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    log_files = glob.glob(os.path.join(script_dir, "full_log*"))
+    log_files = [
+        f for f in glob.glob(os.path.join(script_dir, "full_log*"))
+        if os.path.isfile(f)  # Key change: filter out directories
+    ]
     log_file = log_files[0]
-    match = re.search(r'full_log(.+?)_(\d{4}-\d{2}-\d{2})', log_file)
+    filename = os.path.basename(log_files[0])
+    match = re.search(r'full_log(.+?)_(\d{4}-\d{2}-\d{2})', filename)
     if match:
         ID = match.group(1)
         return ID
