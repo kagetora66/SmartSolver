@@ -1268,6 +1268,32 @@ def lom_card_parcer(cards):
                     "Count": count
                 })
     return lom_cards
+#Gather data for pool sheet
+def pool_data():
+    #it should be in the format of [Name, RAID type, number of disks, Size, LUNS, Hotspares]
+    pool_data = []
+    #Read DG,VD, Name, RAID type, size
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    storcli_sall_path = os.path.join(script_dir, "SystemOverallInfo", "storcli-Sall-show-all.mylinux")
+    pattern = r"""
+    ^                           # Start of line
+    (\d+)/(\d+)                 # Capture DG and VD (e.g., 0/0)
+    \s+                         # Whitespace
+    (RAID[0-9]+|RAID50)         # Capture TYPE (RAID1, RAID5, RAID50)
+    \s+Optl\s+RW\s+Yes\s+\S+\s+-\s+ON\s+  # Skip intermediate columns
+    ([\d.]+)\s+(TB|GB)          # Capture Size and unit (e.g., 237.486 GB)
+    \s+                         # Whitespace
+    ([\w_]+)                    # Capture Name (alphanumeric + underscores)
+    \s*$                        # End of line
+    """
+    
+    with open(smarts_sall_path, "r") as file:
+        sall_content = file.read()
+    regex = re.compile(pattern, re.VERBOSE | re.MULTILINE)
+    for match in regex.finditer(sall_content):
+        dg, vd, raid_type, size, unit, name = match.groups()   
+    
+        
 #Extracts full_log using a RUST program
 def extractor():
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1397,8 +1423,6 @@ ID = get_ID()
 try:
     with open(smarts_file_path, "r") as file:
         smarts_content = file.read()
-    with open(storcli_file_path, "r") as file:
-        storcli_content = file.read()
 except FileNotFoundError:
     print(f"Error: The required files were not found in the /SystemOverallInfo directory.")
     exit(1)
