@@ -191,7 +191,8 @@ def extract_ssd_parameters(log_content):
                         "Reallocated_Sector_Ct", 
                         "Reported_Uncorrect", 
                         "Hardware_ECC_Recovered", 
-                        "Unused_Rsvd_Blk_Cnt_Tot"
+                        "Unused_Rsvd_Blk_Cnt_Tot",
+                        "Used_Reserve_Block_Count"
                     ]
 
                     for match in smart_matches:
@@ -222,6 +223,19 @@ def extract_ssd_parameters(log_content):
                                 "Interface": disk_type,
                                 "Size": tb_value,
                                 "Parameter": "Total_LBAs_Written",
+                                "Threshold": threshold,
+                                "Value": value,
+                                "Raw Value": raw_value
+                            })
+                        #Detect used block count
+                        elif attr_id.strip() == "170":
+                            data.append({
+                                "Brand": brand,
+                                "Device Model": device_model,
+                                "Serial Number": serial_number,
+                                "Interface": disk_type,
+                                "Size": tb_value,
+                                "Parameter": "Used_Reserve_Block_Count",
                                 "Threshold": threshold,
                                 "Value": value,
                                 "Raw Value": raw_value
@@ -1606,7 +1620,6 @@ wb = load_workbook(excel_path)
 yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 orange_fill = PatternFill(start_color="FFA500", end_color="FFFF00", fill_type="solid")
 red_fill = PatternFill(start_color="de0a0a", end_color="FFFF00", fill_type="solid")
-purple_fill = PatternFill(start_color="ffc2fe", end_color="ffc2fe", fill_type="solid")
 #Colour cells based on thresholds
 if "SMART Data" in wb.sheetnames:
     ws = wb["SMART Data"]
@@ -1621,7 +1634,7 @@ if "SMART Data" in wb.sheetnames:
         threshold_str = threshold_cell.value
         value_str = value_cell.value
         raw_value_str = raw_value_cell.value
-        #Temporarily we color this parameter differently for ssd disks
+        #We dont want to color this cell
         is_unused_rsvd = False
         if param_str == "Unused_Rsvd_Blk_Cnt_Tot":
             is_unused_rsvd = True
@@ -1671,7 +1684,7 @@ if "SMART Data" in wb.sheetnames:
         elif compare_value <= threshold_caution:
             raw_value_cell.fill = yellow_fill
         if is_unused_rsvd:
-            raw_value_cell.fill = purple_fill
+            raw_value_cell.fill = PatternFill()
 
 # Function to merge cells for a specific column
 def merge_cells_for_column(ws, col_idx):
@@ -1697,7 +1710,7 @@ def adjust_column_widths(ws):
     for col in ws.columns:
         max_length = max((len(str(cell.value)) for cell in col if cell.value), default=10)
         col_letter = get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = max_length + 2
+        ws.column_dimensions[col_letter].width = max_length + 4
 deep_blue_fill = PatternFill(start_color="b8cbdf", end_color="b8cbdf", fill_type="solid")
 # Format all sheets except "Device Info"
 for sheet_name in wb.sheetnames:
