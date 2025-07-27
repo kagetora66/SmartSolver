@@ -1322,30 +1322,38 @@ def get_date():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
     log_files = glob.glob(os.path.join(script_dir, "full_log*"))
-    log_file = log_files[0]
-    try:
-        with open(sysinfo_file, 'r') as file:
-            content = file.read()
+    if log_files:
+        log_file = log_files[0]
+        try:
+            with open(sysinfo_file, 'r') as file:
+                content = file.read()
 
-            # Search for the time pattern
-            match = re.search(r'Time\s+(\d{4}/\d{2}/\d{2})', content)
+                # Search for the time pattern
+                match = re.search(r'Time\s+(\d{4}/\d{2}/\d{2})', content)
 
-            if match:
-                original_date = match.group(1)
-                return original_date
-            else:
-                #return time of system
-                timestamp = os.path.getmtime(log_file)
-                modified_date = datetime.fromtimestamp(timestamp)
-                formatted_date = modified_date.strftime("%Y/%m/%d")
-                return formatted_date
+                if match:
+                    original_date = match.group(1)
+                    return original_date
+                else:
+                    #return time of system
+                    timestamp = os.path.getmtime(log_file)
+                    modified_date = datetime.fromtimestamp(timestamp)
+                    formatted_date = modified_date.strftime("%Y/%m/%d")
+                    return formatted_date
 
-    except FileNotFoundError:
-        print(f"Error: File {file_path} not found")
-        return None
-    except Exception as e:
-        print(f"Error processing file: {e}")
-        return None
+        except FileNotFoundError:
+            print(f"Error: File {file_path} not found")
+            return None
+        except Exception as e:
+            print(f"Error processing file: {e}")
+            return None
+    else:
+        #return time of system
+        timestamp = os.path.getmtime("version")
+        modified_date = datetime.fromtimestamp(timestamp)
+        formatted_date = modified_date.strftime("%Y/%m/%d")
+        return formatted_date
+
 def parse_date(date_str):
     """Convert 'YYYY/MM/DD' string into year, month, day integers"""
     year, month, day = map(int, date_str.split('/'))
@@ -1379,15 +1387,17 @@ def get_ID():
         f for f in glob.glob(os.path.join(script_dir, "full_log*"))
         if os.path.isfile(f)  # Key change: filter out directories
     ]
-    log_file = log_files[0]
-    filename = os.path.basename(log_files[0])
-    match = re.search(r'full_log(.+?)_(\d{4}-\d{2}-\d{2})', filename)
-    if match:
-        ID = match.group(1)
-        return ID
+    if log_files:
+        log_file = log_files[0]
+        filename = os.path.basename(log_files[0])
+        match = re.search(r'full_log(.+?)_(\d{4}-\d{2}-\d{2})', filename)
+        if match:
+            ID = match.group(1)
+            return ID
+        else:
+            return " "
     else:
-        return " "
-
+        return "SAB"
 def output_name(ID, Date):
     return "smart" + "-"+ ID + "_" + Date + ".xlsx"
 
