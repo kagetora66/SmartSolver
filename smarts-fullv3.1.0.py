@@ -324,13 +324,13 @@ def extract_ssd_parameters(log_content):
                             threshold_samsung_write = round(365 * 5 * user_capacity * 4, -3)
                         elif "850" in device_model:
                             threshold_samsung_write = 150
-                            user_capacity = 0.4
+                            user_capacity = 0.25
                         elif "860" in device_model:
                             threshold_samsung_write = 300
-                            user_capacity = 0.4
+                            user_capacity = 0.25
                         elif "870" in device_model:
                             threshold_samsung_write = 150
-                            user_capacity = 0.4
+                            user_capacity = 0.25
                         else:
                             threshold_samsung_write = 300 #undefined
                         data.append({
@@ -1312,8 +1312,8 @@ def pool_info():
             pool_data.append({
                 "dg" : dg,
                 "vd" : vd,
-                "Name" : name,
-                "Size" : size,          
+                "Pool Name" : name,
+                "Pool Size" : size,          
                 "RAID Type" : raid_type,
             })
     #Finding drive numbers and hotspares for each pool
@@ -1396,9 +1396,9 @@ def pool_info():
                 lun_count= 0
                 pool_name_match = re.search(r"VG Name\s+(\S+)", block, re.IGNORECASE)
                 pool_name = pool_name_match.group(1)
-                if pool_name == raids["Name"]:
+                if pool_name == raids["Pool Name"]:
                     lun_name_match = re.search(r"LV Name\s+(\S+)", block, re.IGNORECASE)
-                    lun_size_match = re.search(r"LV Size\s+(\S+)", block, re.IGNORECASE)
+                    lun_size_match = re.search(r"LV Size\s+(\S+)\s*(TiB|GiB|MiB|KB|TB|GB|MB)", block, re.IGNORECASE)
                     lun_name = lun_name_match.group(1)
                     lun_size = lun_size_match.group(1)
                     raid_copy = raids.copy()
@@ -1408,9 +1408,16 @@ def pool_info():
                     #raids["LUN Name"] = lun_name
                     #raids["LUN Size"] = lun_size
                     pool_data_fn.append(raid_copy)
-                
+    # Define the desired field order
+    field_order = ['dg', 'vd', 'Pool Size', 'Pool Name', 'LUN Name', 'LUN Size', 'Number of disks', 'Hotspares', 'RAID Type']
+    # Create new sorted dictionaries
+    sorted_pool_data = []
+    for item in pool_data_fn:
+        sorted_item = {field: item[field] for field in field_order if field in item}
+        sorted_pool_data.append(sorted_item)
+    
     #Sort the results according to dg number
-    sorted_blocks = sorted(pool_data_fn, key=lambda x: int(x['dg']))
+    sorted_blocks = sorted(sorted_pool_data, key=lambda x: int(x['dg']))
     return sorted_blocks
     
 
@@ -1728,7 +1735,9 @@ with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
     if device_data:
         df_device = pd.DataFrame(device_data)
         df_device.to_excel(writer, sheet_name="Device Info", index=False)
-
+    if pool_data:
+        df_host = pd.DataFrame(pool_data)
+        df_host.to_excel(writer, sheet_name="Pool Data", index=False)
     # Write host information to the third sheet (only if non-empty)
     if host_data:
         df_host = pd.DataFrame(host_data)
@@ -1748,10 +1757,7 @@ with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
             dfs.append(pd.DataFrame(lom_cards_final))
         df_combined = pd.concat(dfs, ignore_index=True)
         df_combined.to_excel(writer, sheet_name="LOM", index=False)
-        if pool_data:
-            df_host = pd.DataFrame(pool_data)
-            df_host.to_excel(writer, sheet_name="Pool Data", index=False)
-
+                        
 # Open the Excel file and format it
 wb = load_workbook(excel_path)
 yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
@@ -1874,7 +1880,10 @@ if "Pool Data" in wb.sheetnames:
     merge_cells_for_column(pooldata, 3)  
     merge_cells_for_column(pooldata, 4)  
     merge_cells_for_column(pooldata, 5)  
-    merge_cells_for_column(pooldata, 6)  
+    merge_cells_for_column(pooldata, 7)
+    merge_cells_for_column(pooldata, 8) 
+    merge_cells_for_column(pooldata, 9)  
+    merge_cells_for_column(pooldata, 6) 
 wb.save(excel_path)
 print("SMART data, device info, and host info extracted and written to the Excel file with proper formatting.")
 Path("python_done.flag").touch()
