@@ -191,7 +191,8 @@ def extract_ssd_parameters(log_content):
                         "Reallocated_Sector_Ct", 
                         "Reported_Uncorrect", 
                         "Hardware_ECC_Recovered", 
-                        "Unused_Rsvd_Blk_Cnt_Tot"
+                        "Unused_Rsvd_Blk_Cnt_Tot",
+                        "Used_Reserve_Block_Count"
                     ]
 
                     for match in smart_matches:
@@ -226,6 +227,19 @@ def extract_ssd_parameters(log_content):
                                 "Value": value,
                                 "Raw Value": raw_value
                             })
+                        #Detect used block count
+                        elif attr_id.strip() == "170":
+                            data.append({
+                                "Brand": brand,
+                                "Device Model": device_model,
+                                "Serial Number": serial_number,
+                                "Interface": disk_type,
+                                "Size": tb_value,
+                                "Parameter": "Used_Reserve_Block_Count",
+                                "Threshold": threshold,
+                                "Value": value,
+                                "Raw Value": raw_value
+                            })
                         elif attr_id.strip() == "202":
                             data.append({
                                 "Brand": brand,
@@ -253,7 +267,6 @@ def extract_ssd_parameters(log_content):
                             "Value": "-",
                             "Raw Value": f"{total_size_written_tb:.2f}"
                         })
-                        total_size_written_ssd = float(wearlevel) * user_capacity
 
                         total_size_micron_waf2 = total_size_written_tb * 2
                         data.append({
@@ -1268,33 +1281,140 @@ def lom_card_parcer(cards):
                     "Count": count
                 })
     return lom_cards
+#Extracts full_log using a RUST program
 #Gather data for pool sheet
-def pool_data():
+def pool_info():
     #it should be in the format of [Name, RAID type, number of disks, Size, LUNS, Hotspares]
     pool_data = []
     #Read DG,VD, Name, RAID type, size
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    storcli_sall_path = os.path.join(script_dir, "SystemOverallInfo", "storcli-Sall-show-all.mylinux")
+
+    storcli_Dall_path = os.path.join(script_dir, "SystemOverallInfo", "storcli-Dall-show-all.mylinux")
+    lvm_info_path = os.path.join(script_dir, "SystemOverallInfo", "LVMInfo.mylinux")
+    storcli_vall_path = os.path.join(script_dir, "SystemOverallInfo", "storcli-Vall-show.mylinux")
     pattern = r"""
     ^                           # Start of line
     (\d+)/(\d+)                 # Capture DG and VD (e.g., 0/0)
     \s+                         # Whitespace
     (RAID[0-9]+|RAID50)         # Capture TYPE (RAID1, RAID5, RAID50)
     \s+Optl\s+RW\s+Yes\s+\S+\s+-\s+ON\s+  # Skip intermediate columns
-    ([\d.]+)\s+(TB|GB)          # Capture Size and unit (e.g., 237.486 GB)
+    ([\d.]+\s+TB|GB)          # Capture Size and unit (e.g., 237.486 GB)
     \s+                         # Whitespace
-    ([\w_]+)                    # Capture Name (alphanumeric + underscores)
+    (\S+)                    # Capture Name (alphanumeric + underscores)
     \s*$                        # End of line
     """
     
-    with open(smarts_sall_path, "r") as file:
-        sall_content = file.read()
-    regex = re.compile(pattern, re.VERBOSE | re.MULTILINE)
-    for match in regex.finditer(sall_content):
-        dg, vd, raid_type, size, unit, name = match.groups()   
+    with open(storcli_vall_path, "r") as file:
+        vall_content = file.read()
+        regex = re.compile(pattern, re.VERBOSE | re.MULTILINE)
+        for match in regex.finditer(vall_content):
+            dg, vd, raid_type, size, name = match.groups()
+            pool_data.append({
+                "dg" : dg,
+                "vd" : vd,
+                "Name" : name,
+                "Size" : size,          
+                "RAID Type" : raid_type,
+            })
+    #Finding drive numbers and hotspares for each pool
+    with open(storcli_Dall_path, "r") as file:
+        dall_content = file.read()
+        dg_section_match = re.search(
+            r'DG Drive LIST :\s*\n=+\s*\n(.*?)\nFREE SPACE DETAILS :',
+            dall_content,
+            re.DOTALL
+        )
+        dg_counts = defaultdict(int)
+        if not dg_section_match:
+           print("DG Drive LIST section not found in file")
+           return
     
-        
-#Extracts full_log using a RUST program
+        dg_section = dg_section_match.group(1)
+   
+      #pattern = r'^\d+:\d+\s+\d+\s+\w+\s+(\d+)\s+[\d.]+\s*(?:TB|GB).*$'
+        pattern = r'^\s*\d+:\d+\s+\d+\s+\w+\s+(\d+)\s+[\d.]+\s*(?:TB|GB)\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+.*$'  
+        for line in dg_section.split('\n'):
+            if line.strip():  # Skip empty lines
+                match = re.match(pattern, line)
+                if match:
+                    dg_number = match.group(1)
+                    dg_counts[dg_number] += 1
+        for raid in pool_data:
+            dg = str(raid["dg"])  # Ensure we compare strings to strings
+            if dg in dg_counts:
+                raid["Number of disks"] = dg_counts[dg]  # Add count to existing dictionary
+            #else:
+            #    raid["Number of disks"] = 0  # Default value if DG not found
+       #Catch Hotspare enclosure and slot
+    # Extract the TOPOLOGY section
+        section_match = re.search(
+            r'TOPOLOGY :\s*\n=+\s*\n(.*?)\nVD LIST :\s*\n=+',
+            dall_content,
+            re.DOTALL
+        )
+        if not section_match:
+            print("TOPOLOGY section not found in file")
+            return []
+        topology_content = section_match.group(1)
+        dhs_drives = []
+        pattern = r'^\s*(\d+)\s+-\s+-\s+(\d+:\d+)\s+\d+\s+DRIVE\s+DHS\s+.*$'
+    
+        for line in topology_content.split('\n'):
+            line = line.strip()
+            match = re.match(pattern, line)
+            if match:
+                dg_number = match.group(1)
+                eid_slot = match.group(2)
+                dhs_drives.append({
+                    'DG': dg_number,
+                    'EID:Slot': eid_slot
+                })
+        #Add Hotspare info
+# First ensure all raid dictionaries have the 'Hotspares' key initialized
+        for raid in pool_data:
+            raid['Hotspares'] = ''
+        for raids in pool_data:     
+            for dhs in dhs_drives:
+                if raids["dg"] == dhs["DG"]:
+                    if raids["Hotspares"]:
+                        raids["Hotspares"] += f", {dhs['EID:Slot']}"
+                    else:
+                        raids["Hotspares"] = dhs['EID:Slot']
+    #Adding information for luns of each pool. Names plus size. (for now we merge the lun name and size with this format )
+    with open(lvm_info_path, "r") as file:
+         # Split the log into blocks for each disk.
+        content = file.read()       
+        disk_blocks = re.findall(
+            r"--- Logical volume ---(.*?)--- Logical volume ---",
+            content, 
+            re.DOTALL
+        )
+        disk_blocks = [block.strip() for block in disk_blocks]
+        pool_data_fn = []
+        for block in disk_blocks:
+            for raids in pool_data:
+                lun_count= 0
+                pool_name_match = re.search(r"VG Name\s+(\S+)", block, re.IGNORECASE)
+                pool_name = pool_name_match.group(1)
+                if pool_name == raids["Name"]:
+                    lun_name_match = re.search(r"LV Name\s+(\S+)", block, re.IGNORECASE)
+                    lun_size_match = re.search(r"LV Size\s+(\S+)", block, re.IGNORECASE)
+                    lun_name = lun_name_match.group(1)
+                    lun_size = lun_size_match.group(1)
+                    raid_copy = raids.copy()
+                    raid_copy["LUN Name"] = lun_name_match.group(1)
+                    raid_copy["LUN Size"] = lun_size_match.group(1)
+                    #raid_copy["LUN Index"] = lun_count
+                    #raids["LUN Name"] = lun_name
+                    #raids["LUN Size"] = lun_size
+                    pool_data_fn.append(raid_copy)
+                
+    #Sort the results according to dg number
+    sorted_blocks = sorted(pool_data_fn, key=lambda x: int(x['dg']))
+    return sorted_blocks
+    
+
+
 def extractor():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     rust_binary = os.path.join(script_dir, "extractor.exe" if os.name == "nt" else "extractor")
@@ -1423,6 +1543,8 @@ ID = get_ID()
 try:
     with open(smarts_file_path, "r") as file:
         smarts_content = file.read()
+    with open(storcli_file_path, "r") as file:
+        storcli_content = file.read()
 except FileNotFoundError:
     print(f"Error: The required files were not found in the /SystemOverallInfo directory.")
     exit(1)
@@ -1590,6 +1712,7 @@ excel_path = output
 #Create slot info
 slot_info = extract_slot_port_info()
 
+pool_data = pool_info()
 with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
     # Write SMART data to first sheet
     df_smart = pd.DataFrame(ssd_data + hdd_data)
@@ -1625,12 +1748,15 @@ with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
             dfs.append(pd.DataFrame(lom_cards_final))
         df_combined = pd.concat(dfs, ignore_index=True)
         df_combined.to_excel(writer, sheet_name="LOM", index=False)
+        if pool_data:
+            df_host = pd.DataFrame(pool_data)
+            df_host.to_excel(writer, sheet_name="Pool Data", index=False)
+
 # Open the Excel file and format it
 wb = load_workbook(excel_path)
 yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 orange_fill = PatternFill(start_color="FFA500", end_color="FFFF00", fill_type="solid")
 red_fill = PatternFill(start_color="de0a0a", end_color="FFFF00", fill_type="solid")
-purple_fill = PatternFill(start_color="ffc2fe", end_color="ffc2fe", fill_type="solid")
 #Colour cells based on thresholds
 if "SMART Data" in wb.sheetnames:
     ws = wb["SMART Data"]
@@ -1645,7 +1771,7 @@ if "SMART Data" in wb.sheetnames:
         threshold_str = threshold_cell.value
         value_str = value_cell.value
         raw_value_str = raw_value_cell.value
-        #Temporarily we color this parameter differently for ssd disks
+        #We dont want to color this cell
         is_unused_rsvd = False
         if param_str == "Unused_Rsvd_Blk_Cnt_Tot":
             is_unused_rsvd = True
@@ -1695,7 +1821,7 @@ if "SMART Data" in wb.sheetnames:
         elif compare_value <= threshold_caution:
             raw_value_cell.fill = yellow_fill
         if is_unused_rsvd:
-            raw_value_cell.fill = purple_fill
+            raw_value_cell.fill = PatternFill()
 
 # Function to merge cells for a specific column
 def merge_cells_for_column(ws, col_idx):
@@ -1721,7 +1847,7 @@ def adjust_column_widths(ws):
     for col in ws.columns:
         max_length = max((len(str(cell.value)) for cell in col if cell.value), default=10)
         col_letter = get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = max_length + 2
+        ws.column_dimensions[col_letter].width = max_length + 4
 deep_blue_fill = PatternFill(start_color="b8cbdf", end_color="b8cbdf", fill_type="solid")
 # Format all sheets except "Device Info"
 for sheet_name in wb.sheetnames:
@@ -1730,7 +1856,7 @@ for sheet_name in wb.sheetnames:
     if sheet_name != "Slot Info":
         for cell in ws[1]:# First row
             cell.fill = deep_blue_fill
-    if sheet_name not in ("Device Info", "Slot Info", "LOM"):# Skip merging for "Device Info" sheet
+    if sheet_name not in ("Device Info", "Slot Info", "LOM", "Pool Data"):# Skip merging for "Device Info" sheet
         for column in range(1,7):
             merge_cells_for_column(ws, column)
         for column in range(11,16):
@@ -1741,6 +1867,14 @@ if "Host Info" in wb.sheetnames:
     merge_cells_for_column(host_info_sheet, 4)  # Merge "Initiators" column (column 4)
     merge_cells_for_column(host_info_sheet, 5)  # Merge "Targets" column (column 5) 
     merge_cells_for_column(host_info_sheet, 6)  # Merge "Connection type" column (column 6) 
+if "Pool Data" in wb.sheetnames: 
+    pooldata = wb["Pool Data"]
+    merge_cells_for_column(pooldata, 1)  
+    merge_cells_for_column(pooldata, 2)  
+    merge_cells_for_column(pooldata, 3)  
+    merge_cells_for_column(pooldata, 4)  
+    merge_cells_for_column(pooldata, 5)  
+    merge_cells_for_column(pooldata, 6)  
 wb.save(excel_path)
 print("SMART data, device info, and host info extracted and written to the Excel file with proper formatting.")
 Path("python_done.flag").touch()
