@@ -1425,7 +1425,7 @@ def pool_info():
         )
         if lv_section:       
             disk_blocks = re.findall(
-                r"--- Logical volume ---(.*?)--- Logical volume ---",
+                r"--- Logical volume ---(.*?)Block device\s+",
                 lv_section.group(1), 
                 re.DOTALL
             )
