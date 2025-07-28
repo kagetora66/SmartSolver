@@ -1288,10 +1288,10 @@ def is_valid_json_file(file_path):
             json.load(f)
         return True
     except (ValueError, json.JSONDecodeError) as e:
-        print(f"Invalid JSON: {e}")
+        #print(f"Invalid JSON: {e}")
         return False
     except FileNotFoundError:
-        print("File not found")
+        #print("File not found")
         return False
 #Gather data for pool sheet
 def pool_info():
@@ -1304,15 +1304,15 @@ def pool_info():
     lvm_info_path = os.path.join(script_dir, "SystemOverallInfo", "LVMInfo.mylinux")
     storcli_vall_path = os.path.join(script_dir, "SystemOverallInfo", "storcli-Vall-show.mylinux")
     pattern = r"""
-    ^                           # Start of line
-    (\d+)/(\d+)                 # Capture DG and VD (e.g., 0/0)
-    \s+                         # Whitespace
-    (RAID[0-9]+|RAID50)         # Capture TYPE (RAID1, RAID5, RAID50)
-    \s+Optl\s+RW\s+Yes\s+\S+\s+-\s+ON\s+  # Skip intermediate columns
-    ([\d.]+\s+TB|GB)          # Capture Size and unit (e.g., 237.486 GB)
-    \s+                         # Whitespace
-    (\S+)                    # Capture Name (alphanumeric + underscores)
-    \s*$                        # End of line
+        ^\s*                    # Start of line, optional whitespace
+        (\d+)\s*\/\s*(\d+)      # DG/VD (flexible spacing around /)
+        \s+(RAID(?:[0-9]+|10|50)) # RAID type (now includes RAID10 explicitly)
+        \s+\S+\s+\S+\s+\S+      # Skip 3 columns (State, Access, Consist)
+        \s+\S+                  # Cache type (any non-whitespace)
+        \s+-\s+                 # sCC column
+        ([\d.,]+\s+[TGM]B)      # Size (with optional , or .)
+        \s+(\S+)                # Name (no whitespace)
+        \s*$                    # End of line
     """
     #We need to check whether vall show is in json format
     if is_valid_json_file(storcli_vall_path):
@@ -1429,7 +1429,7 @@ def pool_info():
                 pool_name = pool_name_match.group(1)
                 if pool_name == raids["Pool Name"]:
                     lun_name_match = re.search(r"LV Name\s+(\S+)", block, re.IGNORECASE)
-                    lun_size_match = re.search(r"LV Size\s+(\S+)\s*(TiB|GiB|MiB|KB|TB|GB|MB)", block, re.IGNORECASE)
+                    lun_size_match = re.search(r"LV Size\s+(\S+\s+(\S))", block, re.IGNORECASE)
                     lun_name = lun_name_match.group(1)
                     lun_size = lun_size_match.group(1)
                     raid_copy = raids.copy()
