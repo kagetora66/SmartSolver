@@ -1,6 +1,7 @@
 #By HPDS Tech Support
 #===========ooOoo============
 from datetime import datetime
+import json
 import re
 import pandas as pd
 from openpyxl import load_workbook
@@ -1281,7 +1282,17 @@ def lom_card_parcer(cards):
                     "Count": count
                 })
     return lom_cards
-#Extracts full_log using a RUST program
+def is_valid_json_file(file_path):
+    try:
+        with open(file_path, 'r') as f:
+            json.load(f)
+        return True
+    except (ValueError, json.JSONDecodeError) as e:
+        print(f"Invalid JSON: {e}")
+        return False
+    except FileNotFoundError:
+        print("File not found")
+        return False
 #Gather data for pool sheet
 def pool_info():
     #it should be in the format of [Name, RAID type, number of disks, Size, LUNS, Hotspares]
@@ -1303,24 +1314,43 @@ def pool_info():
     (\S+)                    # Capture Name (alphanumeric + underscores)
     \s*$                        # End of line
     """
-    
-    with open(storcli_vall_path, "r") as file:
-        vall_content = file.read()
-        regex = re.compile(pattern, re.VERBOSE | re.MULTILINE)
-        for match in regex.finditer(vall_content):
-            dg, vd, raid_type, size, name = match.groups()
-            pool_data.append({
-                "dg" : dg,
-                "vd" : vd,
-                "Pool Name" : name,
-                "Pool Size" : size,          
-                "RAID Type" : raid_type,
-            })
+    #We need to check whether vall show is in json format
+    if is_valid_json_file(storcli_vall_path):
+        with open(storcli_vall_path, "r") as file:
+            data = json.load(file)
+            for controller in data.get("Controllers", []):
+                virtual_drives = controller.get("Response Data", {}).get("Virtual Drives", [])
+                for drive in virtual_drives:
+                # Split DG/VD into separate components
+                    dg_vd = drive.get("DG/VD", "").split('/')
+                    if len(dg_vd) != 2:
+                        continue                    
+                    dg, vd = dg_vd
+                    pool_data.append({
+                        'dg': dg.strip(),
+                        'vd': vd.strip(),
+                        'Pool Name': drive.get("Name", ""),
+                        'RAID Type': drive.get("TYPE", ""),
+                        'Pool Size': drive.get("Size", ""),
+                    })
+    else:      
+        with open(storcli_vall_path, "r") as file:
+            vall_content = file.read()
+            regex = re.compile(pattern, re.VERBOSE | re.MULTILINE)
+            for match in regex.finditer(vall_content):
+                dg, vd, raid_type, size, name = match.groups()
+                pool_data.append({
+                    "dg" : dg,
+                    "vd" : vd,
+                    "Pool Name" : name,
+                    "Pool Size" : size,          
+                    "RAID Type" : raid_type,
+                })
     #Finding drive numbers and hotspares for each pool
     with open(storcli_Dall_path, "r") as file:
         dall_content = file.read()
         dg_section_match = re.search(
-            r'DG Drive LIST :\s*\n=+\s*\n(.*?)\nFREE SPACE DETAILS :',
+            r'DG Drive LIST :\s*\n=+\s*\n(.*?)\nTotal Drive Count',
             dall_content,
             re.DOTALL
         )
@@ -1330,21 +1360,21 @@ def pool_info():
            return
     
         dg_section = dg_section_match.group(1)
-   
-      #pattern = r'^\d+:\d+\s+\d+\s+\w+\s+(\d+)\s+[\d.]+\s*(?:TB|GB).*$'
-        pattern = r'^\s*\d+:\d+\s+\d+\s+\w+\s+(\d+)\s+[\d.]+\s*(?:TB|GB)\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+.*$'  
+      
+        pattern = r'^\s*\d+:\d+\s+\d+\s+\w+\s+(\d+)\s+([\d.]+\s*(?:TB|GB))\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+.*$'  
         for line in dg_section.split('\n'):
             if line.strip():  # Skip empty lines
                 match = re.match(pattern, line)
                 if match:
                     dg_number = match.group(1)
+                    drive_size = match.group(2)
                     dg_counts[dg_number] += 1
         for raid in pool_data:
             dg = str(raid["dg"])  # Ensure we compare strings to strings
             if dg in dg_counts:
                 raid["Number of disks"] = dg_counts[dg]  # Add count to existing dictionary
-            #else:
-            #    raid["Number of disks"] = 0  # Default value if DG not found
+                raid["Drive Size"] = drive_size
+
        #Catch Hotspare enclosure and slot
     # Extract the TOPOLOGY section
         section_match = re.search(
@@ -1380,6 +1410,7 @@ def pool_info():
                         raids["Hotspares"] += f", {dhs['EID:Slot']}"
                     else:
                         raids["Hotspares"] = dhs['EID:Slot']
+
     #Adding information for luns of each pool. Names plus size. (for now we merge the lun name and size with this format )
     with open(lvm_info_path, "r") as file:
          # Split the log into blocks for each disk.
@@ -1404,12 +1435,9 @@ def pool_info():
                     raid_copy = raids.copy()
                     raid_copy["LUN Name"] = lun_name_match.group(1)
                     raid_copy["LUN Size"] = lun_size_match.group(1)
-                    #raid_copy["LUN Index"] = lun_count
-                    #raids["LUN Name"] = lun_name
-                    #raids["LUN Size"] = lun_size
                     pool_data_fn.append(raid_copy)
     # Define the desired field order
-    field_order = ['dg', 'vd', 'Pool Size', 'Pool Name', 'LUN Name', 'LUN Size', 'Number of disks', 'Hotspares', 'RAID Type']
+    field_order = ['dg', 'vd', 'Pool Size', 'Drive Size', 'Pool Name', 'LUN Name', 'LUN Size', 'Number of disks', 'Hotspares', 'RAID Type']
     # Create new sorted dictionaries
     sorted_pool_data = []
     for item in pool_data_fn:
@@ -1418,10 +1446,10 @@ def pool_info():
     
     #Sort the results according to dg number
     sorted_blocks = sorted(sorted_pool_data, key=lambda x: int(x['dg']))
+
     return sorted_blocks
     
-
-
+#Extract the logs
 def extractor():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     rust_binary = os.path.join(script_dir, "extractor.exe" if os.name == "nt" else "extractor")
@@ -1883,7 +1911,8 @@ if "Pool Data" in wb.sheetnames:
     merge_cells_for_column(pooldata, 7)
     merge_cells_for_column(pooldata, 8) 
     merge_cells_for_column(pooldata, 9)  
-    merge_cells_for_column(pooldata, 6) 
+    merge_cells_for_column(pooldata, 6)
+    merge_cells_for_column(pooldata, 10)  
 wb.save(excel_path)
 print("SMART data, device info, and host info extracted and written to the Excel file with proper formatting.")
 Path("python_done.flag").touch()
