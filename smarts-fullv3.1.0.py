@@ -1414,14 +1414,20 @@ def pool_info():
     #Adding information for luns of each pool. Names plus size. (for now we merge the lun name and size with this format )
     with open(lvm_info_path, "r") as file:
          # Split the log into blocks for each disk.
-        content = file.read()       
-        disk_blocks = re.findall(
-            r"--- Logical volume ---(.*?)--- Logical volume ---",
-            content, 
+        content = file.read()
+        lv_section = re.search(
+            r"lvdisplay(.*?)-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=",
+            content,
             re.DOTALL
         )
-        disk_blocks = [block.strip() for block in disk_blocks]
-        pool_data_fn = []
+        if lv_section:       
+            disk_blocks = re.findall(
+                r"--- Logical volume ---(.*?)--- Logical volume ---",
+                lv_section.group(1), 
+                re.DOTALL
+            )
+            disk_blocks = [block.strip() for block in disk_blocks]
+            pool_data_fn = []
         for block in disk_blocks:
             for raids in pool_data:
                 lun_count= 0
