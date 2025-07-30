@@ -1333,6 +1333,7 @@ def pool_info():
                         'RAID Type': drive.get("TYPE", ""),
                         'Pool Size': drive.get("Size", ""),
                     })
+
     else:      
         with open(storcli_vall_path, "r") as file:
             vall_content = file.read()
@@ -1360,20 +1361,27 @@ def pool_info():
            return
     
         dg_section = dg_section_match.group(1)
-      
+        drive_size = []
         pattern = r'^\s*\d+:\d+\s+\d+\s+\w+\s+(\d+)\s+([\d.]+\s*(?:TB|GB))\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+\s+\w+.*$'  
         for line in dg_section.split('\n'):
             if line.strip():  # Skip empty lines
                 match = re.match(pattern, line)
                 if match:
                     dg_number = match.group(1)
-                    drive_size = match.group(2)
+                    #drive_size = match.group(2)
                     dg_counts[dg_number] += 1
+                    drive_size.append({
+                        'dg' : dg_number,
+                        'drive size' : match.group(2)                      
+                     })
         for raid in pool_data:
             dg = str(raid["dg"])  # Ensure we compare strings to strings
+            raid["Drive Size"] = "-"
             if dg in dg_counts:
                 raid["Number of disks"] = dg_counts[dg]  # Add count to existing dictionary
-                raid["Drive Size"] = drive_size
+                for drive in drive_size:
+                    if dg  == drive["dg"]:
+                        raid["Drive Size"] = drive["drive size"]
 
        #Catch Hotspare enclosure and slot
     # Extract the TOPOLOGY section
@@ -1388,7 +1396,6 @@ def pool_info():
         topology_content = section_match.group(1)
         dhs_drives = []
         pattern = r'^\s*(\d+)\s+-\s+-\s+(\d+:\d+)\s+\d+\s+DRIVE\s+DHS\s+.*$'
-    
         for line in topology_content.split('\n'):
             line = line.strip()
             match = re.match(pattern, line)
@@ -1434,6 +1441,9 @@ def pool_info():
         for block in disk_blocks:
             for raids in pool_data:
                 lun_count= 0
+                raids["LUN Name"] = "-"
+                raids["LUN Size"] = "-"
+                raid_copy = raids.copy()
                 pool_name_match = re.search(r"VG Name\s+(\S+)", block, re.IGNORECASE)
                 pool_name = pool_name_match.group(1)
                 if pool_name == raids["Pool Name"]:
@@ -1441,10 +1451,10 @@ def pool_info():
                     lun_size_match = re.search(r"LV Size\s+(\S+\s+(\S))", block, re.IGNORECASE)
                     lun_name = lun_name_match.group(1)
                     lun_size = lun_size_match.group(1)
-                    raid_copy = raids.copy()
+                    #raid_copy = raids.copy()
                     raid_copy["LUN Name"] = lun_name_match.group(1)
                     raid_copy["LUN Size"] = lun_size_match.group(1)
-                    pool_data_fn.append(raid_copy)
+                pool_data_fn.append(raid_copy)
     # Define the desired field order
     field_order = ['dg', 'vd', 'Pool Size', 'Drive Size', 'Pool Name', 'LUN Name', 'LUN Size', 'Number of disks', 'Hotspares', 'RAID Type']
     # Create new sorted dictionaries
