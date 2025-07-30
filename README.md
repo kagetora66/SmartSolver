@@ -1,6 +1,6 @@
 # SmartSolver — StorCLI Full Log Sorting Tool
 
-SmartSolver parses StorCLI full logs and extracts useful information such as SMART parameters, device temperatures, and access point details, saving everything into a structured Excel file.
+SmartSolver parses StorCLI full logs and extracts useful information such as SMART parameters, device temperatures, and access point details, saving everything into a structured Excel file. (HPDS purpose)
 
 ---
 
