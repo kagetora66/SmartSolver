@@ -768,12 +768,10 @@ def extract_sysinfo():
                     "BBU Status": re.search(r'BBU Status =\s*([^\s]+)', content)
                 } 
         #If pmc file does not include desired values
-            if basic_info["UI Version"] == None:
-                with open(version_file, "r") as file:
-                    content = file.read()
-                    basic_info = {
-                        "UI Version": re.search(r'UI Version:\s*([\d.]+)', content)
-                    }
+                if basic_info["UI Version"] == None:
+                    with open(version_file, "r") as file2:
+                        content_version = file2.read()
+                        basic_info["UI Version"] = re.search(r'UI Version:\s*([\d.]+)', content_version)
         else:
             # Extract versions from version file
             with open(version_file, "r") as file:
