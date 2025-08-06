@@ -119,7 +119,7 @@ pub fn extract_zip(
         let mut percent = ((i+1) * 100) / length;
         print!("\rArchive name: {} Percent Completed: {}", zip_path.display(), percent);
         io::stdout().flush().unwrap();
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(5));
     }
     println!();
     //extraction confirmation
@@ -155,10 +155,6 @@ fn wait_for_signal_and_cleanup(extracted_files: Vec<PathBuf>) -> io::Result<()> 
     let user_confirm = base_dir.join("delete_confirmed.flag");
     let user_cancel = base_dir.join("delete_cancelled.flag");
     let confirm = base_dir.join("extracted_confirm");
-    //println!("[Rust] Waiting for two signals:");
-    //println!("1. Python completion (python_done.flag)");
-    //println!("2. User confirmation (delete_confirmed.flag)");
-
     // Wait for Python to finish first
     while !python_done.exists() {
         thread::sleep(Duration::from_secs(1));
