@@ -79,6 +79,7 @@ pub fn extract_zip(
 ) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
     let file = File::open(zip_path)?;
     let mut archive = ZipArchive::new(file)?;
+    let length = archive.len();
     let mut extracted_paths = Vec::new();
     // Verify password if provided
     if let Some(pwd) = password {
@@ -115,7 +116,12 @@ pub fn extract_zip(
             let mut outfile = File::create(&outpath)?;
             io::copy(&mut file, &mut outfile)?;
         }
+        let mut percent = ((i+1) * 100) / length;
+        print!("\rArchive name: {} Percent Completed: {}", zip_path.display(), percent);
+        io::stdout().flush().unwrap();
+        thread::sleep(Duration::from_millis(100));
     }
+    println!();
     //extraction confirmation
     if !zip_path
         .file_name()
