@@ -999,37 +999,50 @@ def extract_host_info():
 
         # Remove duplicates and group by all keys except "Target Address"
         def get_group_key(d):
-            return tuple((k, v) for k, v in d.items() if k != "Target Address")
-        grouped = defaultdict(list)
+            return tuple((k, v) for k, v in d.items() if k not in ["Target Address", "Initiator Addresses"])
+        
+        grouped = defaultdict(lambda: {
+            "Target Address": set(),  # Using set to avoid duplicates
+            "Initiator Addresses": set(),
+            "original_keys": None
+        })
+        
+        # First pass: collect unique addresses and remember key order
         for item in host_data:
             key = get_group_key(item)
-            grouped[key].append(item["Target Address"])
-
-        # Merging with controlled key order
+            group = grouped[key]
+            
+            if group["original_keys"] is None:
+                group["original_keys"] = list(item.keys())
+            
+            if "Target Address" in item:
+                group["Target Address"].add(item["Target Address"])
+            if "Initiator Addresses" in item:
+                group["Initiator Addresses"].add(item["Initiator Addresses"])
+        
+        # Second pass: build merged dictionaries
         merged = []
-        for key, addresses in grouped.items():
-            # Rebuild original dict (without Target Address)
+        for key, data in grouped.items():
             new_dict = dict(key)
-
-            # Get all keys except "Target Address"
-            original_keys = list(new_dict.keys())
-
-            # Insert "Target Address" before the last key
-            if len(original_keys) >= 1:
+            original_keys = data["original_keys"]
+            
+            # Insert addresses in original key order
+            if original_keys:
                 last_key = original_keys[-1]
-                init_key = original_keys[3]
-                # Remove last key temporarily
                 last_value = new_dict.pop(last_key)
-                init_value = new_dict.pop(init_key)
-                # Add Target Address
-                new_dict["Target Address"] = "__ ".join(addresses)
-                # Restore last key
-                new_dict[init_key] = init_value
+                
+                if data["Target Address"]:
+                    new_dict["Target Address"] = "__ ".join(sorted(data["Target Address"]))
+                if data["Initiator Addresses"]:
+                    new_dict["Initiator Addresses"] = "__ ".join(sorted(data["Initiator Addresses"]))
+                
                 new_dict[last_key] = last_value
             else:
-                # Edge case: only "Target Address" existed
-                new_dict["Target Address"] = "__ ".join(addresses)
-
+                if data["Target Address"]:
+                    new_dict["Target Address"] = "__ ".join(sorted(data["Target Address"]))
+                if data["Initiator Addresses"]:
+                    new_dict["Initiator Addresses"] = "__ ".join(sorted(data["Initiator Addresses"]))
+            
             merged.append(new_dict)
         return merged
 
