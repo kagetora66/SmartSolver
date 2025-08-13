@@ -1459,29 +1459,32 @@ def pool_info():
         for raid in pool_data: 
             raid["LUN Name"] = "-"
             raid["LUN Size"] = "-"
+        raid_merge = []
         for block in disk_blocks:
             for raids in pool_data:
                 pool_name_match = re.search(r"VG Name\s+(\S+)", block, re.IGNORECASE)
                 pool_name = pool_name_match.group(1)
                 if pool_name == raids["Pool Name"]:
-                    #print(pool_name)
+                    raid = raids.copy()
                     lun_name_match = re.search(r"LV Name\s+(\S+)", block, re.IGNORECASE)
                     lun_size_match = re.search(r"LV Size\s+(\S+\s+(\S))", block, re.IGNORECASE)
                     lun_name = lun_name_match.group(1)
                     lun_size = lun_size_match.group(1)
-                    raids["LUN Name"] = lun_name
-                    raids["LUN Size"] = lun_size
+                    raid["LUN Name"] = lun_name
+                    raid["LUN Size"] = lun_size
+                    #print(raids)
+                    raid_merge.append(raid)
     # Define the desired field order
     field_order = ['dg', 'vd', 'Pool Size', 'Drive Size', 'Pool Name', 'LUN Name', 'LUN Size', 'Number of disks', 'Hotspares', 'RAID Type']
     # Create new sorted dictionaries
+    #print(raid_merge)
     sorted_pool_data = []
-    for item in pool_data:
+    for item in raid_merge:
         sorted_item = {field: item[field] for field in field_order if field in item}
         sorted_pool_data.append(sorted_item)
     
     #Sort the results according to dg number
     sorted_blocks = sorted(sorted_pool_data, key=lambda x: int(x['dg']))
-
     return sorted_blocks
     
 #Extract the logs
@@ -1942,6 +1945,9 @@ for sheet_name in wb.sheetnames:
             merge_cells_for_column(ws, column)
         for column in range(11,16):
             merge_cells_for_column(ws, column)
+    if sheet_name == "Pool Data":
+        for column in range(1, 11):
+            merge_cells_for_column(ws, column)  
     adjust_column_widths(ws)  # Adjust column widths for all sheets
 if "Host Info" in wb.sheetnames: 
     host_info_sheet = wb["Host Info"]
