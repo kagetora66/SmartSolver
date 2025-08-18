@@ -7,12 +7,9 @@ import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment
-import csv
 import os
 import glob
 import sqlite3
-import getpass
-from zipfile import ZipFile
 import subprocess
 from openpyxl.styles import PatternFill
 from pathlib import Path
@@ -31,7 +28,6 @@ ssd_params = [
     "Total_LBAs_Written",
     "Total Size Written (TB)"
 ]
-
 hdd_params = [
     "Elements in grown defect list",
     "Total Uncorrected Errors",
@@ -1401,7 +1397,7 @@ def pool_info():
                     if dg  == drive["dg"]:
                         raid["Drive Size"] = drive["drive size"]
 
-       #Catch Hotspare enclosure and slot
+       #Catch Hotspare enclosure and slot alongside pool disks
     # Extract the TOPOLOGY section
         section_match = re.search(
             r'TOPOLOGY :\s*\n=+\s*\n(.*?)\nVD LIST :\s*\n=+',
@@ -1413,10 +1409,13 @@ def pool_info():
             return []
         topology_content = section_match.group(1)
         dhs_drives = []
+        pool_drives = []
         pattern = r'^\s*(\d+)\s+-\s+-\s+(\d+:\d+)\s+\d+\s+DRIVE\s+DHS\s+.*$'
+        pool_pattern = r'^\s*(\d+)\s+\d+\s+\d+\s+(\d+:\d+)\s+\d+\s+DRIVE\s+Onln\s+.*$'
         for line in topology_content.split('\n'):
             line = line.strip()
             match = re.match(pattern, line)
+            pool_match = re.match(pool_pattern, line)
             if match:
                 dg_number = match.group(1)
                 eid_slot = match.group(2)
@@ -1424,11 +1423,26 @@ def pool_info():
                     'DG': dg_number,
                     'EID:Slot': eid_slot
                 })
+            elif pool_match:
+                dg_number_drv = pool_match.group(1)
+                eid_slot_drv = pool_match.group(2)
+                pool_drives.append({
+                    'DG': dg_number_drv,
+                    'EID:Slot': eid_slot_drv
+                })
         #Add Hotspare info
 # First ensure all raid dictionaries have the 'Hotspares' key initialized
         for raid in pool_data:
             raid['Hotspares'] = ''
-        for raids in pool_data:     
+            raid['Pool Drives'] = ''
+        for raids in pool_data:    
+            for drive in pool_drives:
+                if raids["dg"] == drive["DG"]:
+                    if raids["Pool Drives"]:
+                        raids["Pool Drives"] += f", {drive['EID:Slot']}"
+                    else:
+                        raids["Pool Drives"] = drive['EID:Slot']
+
             for dhs in dhs_drives:
                 if raids["dg"] == dhs["DG"]:
                     if raids["Hotspares"]:
@@ -1439,6 +1453,29 @@ def pool_info():
         for raid in pool_data:
             if raid["Hotspares"] == '':
                 raid["Hotspares"] = "-"
+            if raid["Pool Drives"] == '':
+                raid["Pool Drives"] = "-"
+    #Add front end name for pools from database
+    for raid in pool_data:
+        db_dir = "./Database"
+        sab_db_file = os.path.join(db_dir, "sab.db")
+        if os.path.exists(sab_db_file):
+            with sqlite3.connect(sab_db_file) as conn:
+                cursor = conn.cursor()
+            
+                # Query to find matching FE name for this raid's Pool Name
+                cursor.execute(
+                    'SELECT "fe_name" FROM pool_name_mapper WHERE "be_name" = ?',
+                    (raid['Pool Name'],)
+                )
+            
+                result = cursor.fetchone()
+                # Add the FE name to the raid dictionary if found
+                raid['Pool Name-FE'] = result[0] if result else None
+        else:
+            raid['Pool Name-FE'] = None
+            print(f"Database not found at {sab_db_file}")
+
     #Adding information for luns of each pool. Names plus size. (for now we merge the lun name and size with this format )
     with open(lvm_info_path, "r") as file:
          # Split the log into blocks for each disk.
@@ -1455,7 +1492,6 @@ def pool_info():
                 re.DOTALL
             )
             disk_blocks = [block.strip() for block in disk_blocks]
-            pool_data_fn = []
         for raid in pool_data: 
             raid["LUN Name"] = "-"
             raid["LUN Size"] = "-"
@@ -1472,10 +1508,9 @@ def pool_info():
                     lun_size = lun_size_match.group(1)
                     raid["LUN Name"] = lun_name
                     raid["LUN Size"] = lun_size
-                    #print(raids)
                     raid_merge.append(raid)
     # Define the desired field order
-    field_order = ['dg', 'vd', 'Pool Size', 'Drive Size', 'Pool Name', 'LUN Name', 'LUN Size', 'Number of disks', 'Hotspares', 'RAID Type']
+    field_order = ['dg', 'vd', 'Pool Size', 'Drive Size', 'Pool Name', 'Pool Name-FE', 'Pool Drives', 'LUN Name', 'LUN Size', 'Number of disks', 'Hotspares', 'RAID Type']
     # Create new sorted dictionaries
     #print(raid_merge)
     sorted_pool_data = []
@@ -1946,7 +1981,7 @@ for sheet_name in wb.sheetnames:
         for column in range(11,16):
             merge_cells_for_column(ws, column)
     if sheet_name == "Pool Data":
-        for column in range(1, 11):
+        for column in range(1, 12):
             merge_cells_for_column(ws, column)  
     adjust_column_widths(ws)  # Adjust column widths for all sheets
 if "Host Info" in wb.sheetnames: 
