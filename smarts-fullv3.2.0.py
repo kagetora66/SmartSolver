@@ -1499,13 +1499,13 @@ def pool_info():
         for block in disk_blocks:
             for raids in pool_data:
                 pool_name_match = re.search(r"VG Name\s+(\S+)", block, re.IGNORECASE)
-                pool_name = pool_name_match.group(1)
+                pool_name = pool_name_match.group(1) if pool_name_match else "N/A"
                 if pool_name == raids["Pool Name"]:
                     raid = raids.copy()
                     lun_name_match = re.search(r"LV Name\s+(\S+)", block, re.IGNORECASE)
                     lun_size_match = re.search(r"LV Size\s+(\S+\s+(\S))", block, re.IGNORECASE)
-                    lun_name = lun_name_match.group(1)
-                    lun_size = lun_size_match.group(1)
+                    lun_name = lun_name_match.group(1) if lun_name_match else "N/A"
+                    lun_size = lun_size_match.group(1) if lun_size_match else "N/A"
                     raid["LUN Name"] = lun_name
                     raid["LUN Size"] = lun_size
                     raid_merge.append(raid)
@@ -1582,7 +1582,7 @@ def get_date():
                     return formatted_date
 
         except FileNotFoundError:
-            print(f"Error: File {file_path} not found")
+            print(f"Error: File not found")
             return None
         except Exception as e:
             print(f"Error processing file: {e}")
@@ -1640,7 +1640,7 @@ def get_ID():
         return "SAB"
 def output_name(ID, Date):
     return "smart" + "-"+ ID + "_" + Date + ".xlsx"
-
+################################## main part of script ##########################################
 #Extract files
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isfile(os.path.join(script_dir, 'version')):
