@@ -65,35 +65,36 @@ threshold_micron_ssd = {
 }
 #Part Numbers for SSD and HDD Disks (LOM prepration)
 partnums = [
-    {"Type": "HDD", "Interface": "SAS", "Size": "1.20 TB", "Describtion": "HPDS 1.2TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-1200"},
-    {"Type": "HDD", "Interface": "SAS", "Size": "1.80 TB", "Describtion": "HPDS 1.8TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-600"},
-    {"Type": "HDD", "Interface": "SAS", "Size": "2.40 TB", "Describtion": "HPDS 2.4TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-2400"},
-    {"Type": "HDD", "Interface": "SAS", "Size": "2.00 TB", "Describtion": "HPDS 2TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-2000"},
-    {"Type": "HDD", "Interface": "SAS", "Size": "4.00 TB", "Describtion": "HPDS 4TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-4000"},
-    {"Type": "HDD", "Interface": "SAS", "Size": "6.00 TB", "Describtion": "HPDS 6TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-6000"},
-    {"Type": "HDD", "Interface": "SAS", "Size": "8.00 TB", "Describtion": "HPDS 8TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-8000"},
-    {"Type": "HDD", "Interface": "SAS", "Size": "12.00 TB", "Describtion": "HPDS 12TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-12000"},
-    {"Type": "HDD", "Interface": "SATA", "Size": "1.94 TB", "Describtion": "HPDS 1.9TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-1900"},
-    {"Type": "HDD", "Interface": "SATA", "Size": "3.84 TB", "Describtion": "HPDS 3.8TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-3800"},
-    {"Type": "HDD", "Interface": "SATA", "Size": "7.68 TB", "Describtion": "HPDS 7.6TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-7600"},
-    {"Type": "HDD", "Interface": "SAS", "Size": "16.0 TB", "Describtion": "HPDS 16TB SAS 7.2K Enterprise HDD SX for SAB-HB", "Part Number": "DHBD-HS07SX-16000"},
-    {"Type": "SSD", "Interface": "SATA", "Size": "960 GB", "Describtion": "HPDS 960GB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-960"},
-    {"Type": "SSD", "Interface": "SATA", "Size": "1.92 TB", "Describtion": "HPDS 1.9TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-1900"},
-    {"Type": "SSD", "Interface": "SATA", "Size": "3.84 TB", "Describtion": "HPDS 3.8TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-3800"},
-    {"Type": "SSD", "Interface": "SATA", "Size": "7.68 TB", "Describtion": "HPDS 7.6TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-7600"},
-    {"Type": "SSD", "Interface": "SAS", "Size": "960 GB", "Describtion": "HPDS 960GB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-960"},
-    {"Type": "SSD", "Interface": "SAS", "Size": "1.92 TB", "Describtion": "HPDS 1.9TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-1920"},
-    {"Type": "SSD", "Interface": "SAS", "Size": "3.84 TB", "Describtion": "HPDS 3.8TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-3840"},
-    {"Type": "SSD", "Interface": "SAS", "Size": "7.68 TB", "Describtion": "HPDS 7.6TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-7680"}
+    {"Type": "HDD", "Interface": "SAS", "Size": "1.20 TB", "Description": "HPDS 1.2TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-1200"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "1.80 TB", "Description": "HPDS 1.8TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-600"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "2.40 TB", "Description": "HPDS 2.4TB SAS 12G Enterprise 10K 2.5in HDD", "Part Number": "PD-S1025-2400"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "2.00 TB", "Description": "HPDS 2TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-2000"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "4.00 TB", "Description": "HPDS 4TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-4000"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "6.00 TB", "Description": "HPDS 6TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-6000"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "8.00 TB", "Description": "HPDS 8TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-8000"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "12.00 TB", "Description": "HPDS 12TB NL-SAS 12G Enterprise 7.2K 3.5in HDD", "Part Number": "PD-NS7235-12000"},
+    {"Type": "HDD", "Interface": "SATA", "Size": "1.94 TB", "Description": "HPDS 1.9TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-1900"},
+    {"Type": "HDD", "Interface": "SATA", "Size": "3.84 TB", "Description": "HPDS 3.8TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-3800"},
+    {"Type": "HDD", "Interface": "SATA", "Size": "7.68 TB", "Description": "HPDS 7.6TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-7600"},
+    {"Type": "HDD", "Interface": "SAS", "Size": "16.0 TB", "Description": "HPDS 16TB SAS 7.2K Enterprise HDD SX for SAB-HB", "Part Number": "DHBD-HS07SX-16000"},
+    {"Type": "SSD", "Interface": "SATA", "Size": "960 GB", "Description": "HPDS 960GB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-960"},
+    {"Type": "SSD", "Interface": "SATA", "Size": "1.92 TB", "Description": "HPDS 1.9TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-1900"},
+    {"Type": "SSD", "Interface": "SATA", "Size": "3.84 TB", "Description": "HPDS 3.8TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-3800"},
+    {"Type": "SSD", "Interface": "SATA", "Size": "7.68 TB", "Description": "HPDS 7.6TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-7600"},
+    {"Type": "SSD", "Interface": "SAS", "Size": "960 GB", "Description": "HPDS 960GB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-960"},
+    {"Type": "SSD", "Interface": "SAS", "Size": "1.92 TB", "Description": "HPDS 1.9TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-1920"},
+    {"Type": "SSD", "Interface": "SAS", "Size": "3.84 TB", "Description": "HPDS 3.8TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-3840"},
+    {"Type": "SSD", "Interface": "SAS", "Size": "7.68 TB", "Description": "HPDS 7.6TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-7680"}
 ]
 partnums_card = [
-    {"Type": "FC", "Ports": 2, "Speed": "8Gb", "Describtion": "HPDS 8Gb 2-port PCIe Fiber Channel HBA", "Part Number": "PI-FM08G2P"},
-    {"Type": "FC", "Ports": 4, "Speed": "8Gb", "Describtion": "HPDS 8Gb 4-port PCIe Fiber Channel HBA", "Part Number": "PI-FM08G4P"},
-    {"Type": "FC", "Ports": 2, "Speed": "16Gb", "Describtion": "HPDS 16Gb 2-port PCIe Fiber Channel HBA", "Part Number": "PI-FM16G2P"},
-    {"Type": "FC", "Ports": 4, "Speed": "16Gb", "Describtion": "HPDS 16Gb 4-port PCIe Fiber Channel HBA", "Part Number": "PI-FM16G4P"},
-    {"Type": "NIC", "Ports": 4, "Speed": "1Gb", "Describtion": "HPDS 1Gb 4-port PCIe Ethernet Adapter", "Part Number": "PI-N1GT4P"},
-    {"Type": "NIC", "Ports": 2, "Speed": "10Gb", "Describtion": "HPDS 10Gb 2-port PCIe Ethernet Adapter", "Part Number": "PI-NT10G2P"}
+    {"Type": "FC", "Ports": 2, "Speed": "8Gb", "Description": "HPDS 8Gb 2-port PCIe Fiber Channel HBA", "Part Number": "PI-FM08G2P"},
+    {"Type": "FC", "Ports": 4, "Speed": "8Gb", "Description": "HPDS 8Gb 4-port PCIe Fiber Channel HBA", "Part Number": "PI-FM08G4P"},
+    {"Type": "FC", "Ports": 2, "Speed": "16Gb", "Description": "HPDS 16Gb 2-port PCIe Fiber Channel HBA", "Part Number": "PI-FM16G2P"},
+    {"Type": "FC", "Ports": 4, "Speed": "16Gb", "Description": "HPDS 16Gb 4-port PCIe Fiber Channel HBA", "Part Number": "PI-FM16G4P"},
+    {"Type": "NIC", "Ports": 4, "Speed": "1Gb", "Description": "HPDS 1Gb 4-port PCIe Ethernet Adapter", "Part Number": "PI-N1GT4P"},
+    {"Type": "NIC", "Ports": 2, "Speed": "10Gb", "Description": "HPDS 10Gb 2-port PCIe Ethernet Adapter", "Part Number": "PI-NT10G2P"}
 ]
+
 smart_pattern = re.compile(
     r"(\d+)\s+([\w_]+)\s+0x[0-9a-fA-F]+\s+(\d+)\s+\d+\s+(\d+)\s+\w+-?\w*\s+\w+\s+-\s+(\d+)"
 )
@@ -1194,7 +1195,7 @@ def lom_disk(disk_dicts):
         for part in partnums:
             if  part["Type"] == Type and part["Size"] == size and part["Interface"] == interface:
                 lom_disk_count.append({
-                    "Describtion": part["Describtion"],
+                    "Description": part["Description"],
                     "Part Number": part["Part Number"],
                     "Count": count
                 })
@@ -1291,7 +1292,7 @@ def lom_card_parcer(cards):
         for part in partnums_card:
             if ports != 1 and part["Type"] == Type and part["Ports"] == ports and part["Speed"] == speed:
                 lom_cards.append({
-                    "Describtion": part["Describtion"],
+                    "Description": part["Description"],
                     "Part Number": part["Part Number"],
                     "Count": count
                 })
@@ -1307,6 +1308,37 @@ def is_valid_json_file(file_path):
     except FileNotFoundError:
         #print("File not found")
         return False
+def lom_chassis(is_hdd):
+    chassis_lom = []
+    is_allflash = True
+    sab_model = "DT"
+    if is_hdd == True:
+        is_allflash = False
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
+    with open(sysinfo_file, "r") as file:
+        for line in file:
+            if "CPU2" in line:
+                sab_model = "HB"
+    if sab_model == "DT":
+        chassis_lom.append({
+            "Description" : "HPDS SAB-DT-100 A-Series SAN Storage",
+            "Part Number" : "PDT-A100",
+            "Count" : "1",
+        })
+    elif is_allflash:
+        chassis_lom.append({
+            "Description" : "HPDS SAB-AF-80 B-Series All-Flash SAN Storage",
+            "Part Number" : "PBA-B080",
+            "Count" : "1",
+        })
+    elif sab_model == "HB":
+        chassis_lom.append({
+            "Description" : "HPDS SAB-HB-150 A-Series SAN Storage",
+            "Part Number" : "PBH-A150",
+            "Count" : "1",
+        })
+    return chassis_lom
 #Gather data for pool sheet
 def pool_info():
     #it should be in the format of [Name, RAID type, number of disks, Size, LUNS, Hotspares]
@@ -1677,6 +1709,11 @@ if ssd_data:
     ssd_lom = lom_disk(ssd_data)
 if hdd_data:
     hdd_lom = lom_disk(hdd_data)
+    is_hdd = True
+else:
+    is_hdd = False
+#For Chassis LOM
+chassis_lom = lom_chassis(is_hdd)
 # Extract host information
 host_data = extract_host_info()
 # Extract General Device Info
@@ -1860,8 +1897,10 @@ with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
         df_host.to_excel(writer, sheet_name="General System Info", index=False)
     if slot_info:
         write_slot_info_sheet(writer, slot_info)
-    if ssd_lom or hdd_lom or lom_cards_final:
+    if ssd_lom or hdd_lom or lom_cards_final or chassis_lom:
         dfs = []
+        if chassis_lom:
+            dfs.append(pd.DataFrame(chassis_lom))
         if ssd_lom:
             dfs.append(pd.DataFrame(ssd_lom))
         if hdd_lom:
