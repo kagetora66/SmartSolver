@@ -1981,7 +1981,7 @@ for sheet_name in wb.sheetnames:
         for column in range(11,16):
             merge_cells_for_column(ws, column)
     if sheet_name == "Pool Data":
-        for column in range(1, 12):
+        for column in range(1, 13):
             merge_cells_for_column(ws, column)  
     adjust_column_widths(ws)  # Adjust column widths for all sheets
 if "Host Info" in wb.sheetnames: 
