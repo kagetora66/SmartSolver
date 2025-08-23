@@ -95,6 +95,25 @@ partnums_card = [
     {"Type": "NIC", "Ports": 2, "Speed": "10Gb", "Description": "HPDS 10Gb 2-port PCIe Ethernet Adapter", "Part Number": "PI-NT10G2P"}
 ]
 
+partnums_chassis = [
+    {"Type": "SuperMicro", "Size": "4U", "FF": "36", "Description": "HPDS SAB-HB-150 A-Series Hybrid SAN Storage", "Part Number": "PBH-A150"},
+    {"Type": "Chenbro", "Size": "2U", "FF": "24", "Description": "HPDS SAB-HB-080 B-Series Hybrid SAN Storage", "Part Number": "PBH-B080"},
+    {"Type": "SuperMicro", "Size": "4U", "FF": "24", "Description": "HPDS SAB-HB-100 A-Series Hybrid SAN Storage", "Part Number": "PBH-A100"},
+    {"Type": "Chenbro", "Size": "2U", "FF": "12", "Description": "HPDS SAB-HB-50 B-Series Hybrid SAN Storage", "Part Number": "PBH-B050"},
+    {"Type": "Gooxi", "Size": "4U", "FF": "36", "Description": "HPDS SAB-HB-150 C-Series Hybrid SAN Storage", "Part Number": "PBH-C150"},
+    {"Type": "Chenbro", "Size": "4U", "FF": "24", "Description": "HPDS SAB-HB-100 B-Series Hybrid SAN Storage", "Part Number": "PBH-B100"},
+    {"Type": "Chenbro", "Size": "2U", "FF": "12", "Description": "HPSD SAB-DT-50 B-Series SAN Storage", "Part Number": "PDT-B050"},
+    {"Type": "SuperMicro", "Size": "4U", "FF": "24", "Description": "HPDS SAB-DT-100 A-Series SAN Storage", "Part Number": "PDT-A100"},
+    {"Type": "Gooxi", "Size": "4U", "FF": "36", "Description": "HPDS SAB-DT-150 C-Series SAN Storage", "Part Number": "PDT-C150"},
+    {"Type": "SuperMicro", "Size": "4U", "FF": "36", "Description": "HPDS SAB-DT-150 A-Series SAN Storage", "Part Number": "PDT-A150"},
+    {"Type": "Chenbro", "Size": "4U", "FF": "24", "Description": "HPDS SAB-DT-100 B-Series SAN Storage", "Part Number": "PDT-B100"},
+    {"Type": "SuperMicro", "Size": "4U", "FF": "24", "Description": "HPDS SAB-AF-150 A-Series All-Flash SAN Storage", "Part Number": "PBA-A150"},
+    {"Type": "Gooxi", "Size": "4U", "FF": "12", "Description": "HPDS SAB-AF-150 C-Series All-Flash SAN Storage", "Part Number": "PBA-C150"},
+    {"Type": "Chenbro", "Size": "2U", "FF": "24", "Description": "HPDS SAB-AF-80 B-Series All-Flash SAN Storage", "Part Number": "PBA-B080"},
+    {"Type": "Chenbro", "Size": "2U", "FF": "12", "Description": "HPDS SAB-AF-50 B-Series All-Flash SAN Storage", "Part Number": "PBA-B050"},
+    {"Type": "SuperMicro", "Size": "2U", "FF": "24", "Description": "HPDS SAB-AF-80 A-Series All-Flash SAN Storage", "Part Number": "PBA-A050"},
+]
+
 smart_pattern = re.compile(
     r"(\d+)\s+([\w_]+)\s+0x[0-9a-fA-F]+\s+(\d+)\s+\d+\s+(\d+)\s+\w+-?\w*\s+\w+\s+-\s+(\d+)"
 )
@@ -1312,32 +1331,44 @@ def lom_chassis(is_hdd):
     chassis_lom = []
     is_allflash = True
     sab_model = "DT"
+    size = "2U"
+    ff = "12" #default
+    chassis_type = "Chenbro"
+    #This is how we detect ALL FLASH, if there is no data for hdd at all!
     if is_hdd == True:
         is_allflash = False
     script_dir = os.path.dirname(os.path.abspath(__file__))
     sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
+    #Here we get U number and FF
+    eall_file = os.path.join(script_dir, "SystemOverallInfo", "storcli-Eall-show.mylinux")
+    eall_show_file = os.path.join(script_dir, "SystemOverallInfo", "storcli-Eall-show-all.mylinux")
     with open(sysinfo_file, "r") as file:
         for line in file:
             if "CPU2" in line:
                 sab_model = "HB"
+    with open(eall_file, "r") as file:
+        for line in file:
+            if "Port 4 - 7" in line:
+                size = "4U"
+                ff = "36"
+            if " 24 " in line and size == "2U":
+                size == "4U"
+                ff = "24"
+    with open(eall_show_file, "r") as file:
+        for line in file:
+            if "SMC" in line:
+                chassis_type = "SuperMicro"
     if sab_model == "DT":
-        chassis_lom.append({
-            "Description" : "HPDS SAB-DT-100 A-Series SAN Storage",
-            "Part Number" : "PDT-A100",
-            "Count" : "1",
-        })
+        sab_model = "DT"
     elif is_allflash:
-        chassis_lom.append({
-            "Description" : "HPDS SAB-AF-80 B-Series All-Flash SAN Storage",
-            "Part Number" : "PBA-B080",
-            "Count" : "1",
-        })
-    elif sab_model == "HB":
-        chassis_lom.append({
-            "Description" : "HPDS SAB-HB-150 A-Series SAN Storage",
-            "Part Number" : "PBH-A150",
-            "Count" : "1",
-        })
+        sab_model = "AF"
+    for part in partnums_chassis:
+        if  part["Type"] == chassis_type and part["FF"] == ff and part["Size"] == size and sab_model in part["Description"]:
+            chassis_lom.append({
+                "Description": part["Description"],
+                "Part Number": part["Part Number"],
+                "Count": "1"
+            })
     return chassis_lom
 #Gather data for pool sheet
 def pool_info():
@@ -1487,6 +1518,12 @@ def pool_info():
                 raid["Hotspares"] = "-"
             if raid["Pool Drives"] == '':
                 raid["Pool Drives"] = "-"
+            #Logic to separate each ten entries by newline
+            drives = raid["Pool Drives"].split(',')
+            raid["Pool Drives"] = '\n'.join(
+                ','.join(drives[i:i+10]) 
+                for i in range(0, len(drives), 10)
+            )
     #Add front end name for pools from database
     for raid in pool_data:
         db_dir = "./Database"
