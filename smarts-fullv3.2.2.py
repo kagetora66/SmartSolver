@@ -1354,10 +1354,13 @@ def lom_chassis(is_hdd):
             if " 24 " in line and size == "2U":
                 size == "4U"
                 ff = "24"
-    with open(eall_show_file, "r") as file:
-        for line in file:
-            if "SMC" in line:
-                chassis_type = "SuperMicro"
+    if os.path.exists(eall_show_file):
+        with open(eall_show_file, "r") as file:
+            for line in file:
+                if "SMC" in line:
+                    chassis_type = "SuperMicro"
+    else:
+        print("No eall_show_all file is found")
     if sab_model == "DT":
         sab_model = "DT"
     elif is_allflash:
