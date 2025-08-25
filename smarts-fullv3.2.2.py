@@ -1518,12 +1518,6 @@ def pool_info():
                 raid["Hotspares"] = "-"
             if raid["Pool Drives"] == '':
                 raid["Pool Drives"] = "-"
-            #Logic to separate each ten entries by newline
-            drives = raid["Pool Drives"].split(',')
-            raid["Pool Drives"] = '\n'.join(
-                ','.join(drives[i:i+10]) 
-                for i in range(0, len(drives), 10)
-            )
     #Add front end name for pools from database
     for raid in pool_data:
         db_dir = "./Database"
@@ -2042,7 +2036,13 @@ def adjust_column_widths(ws):
     for col in ws.columns:
         max_length = max((len(str(cell.value)) for cell in col if cell.value), default=10)
         col_letter = get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = max_length + 4
+        if max_length < 70:
+            ws.column_dimensions[col_letter].width = max_length + 4
+        else:
+            ws.column_dimensions[col_letter].width = 50
+            for column in ws.iter_cols():
+                for cell in column:
+                    cell.alignment = Alignment(wrap_text=True, vertical='center')
 deep_blue_fill = PatternFill(start_color="b8cbdf", end_color="b8cbdf", fill_type="solid")
 # Format all sheets except "Device Info"
 for sheet_name in wb.sheetnames:
@@ -2058,8 +2058,12 @@ for sheet_name in wb.sheetnames:
             merge_cells_for_column(ws, column)
     if sheet_name == "Pool Data":
         for column in range(1, 13):
-            merge_cells_for_column(ws, column)  
-    adjust_column_widths(ws)  # Adjust column widths for all sheets
+            merge_cells_for_column(ws, column)
+        #for row in ws.iter_rows():
+        #    for cell in row:
+        #        cell.alignment = Alignment(wrap_text=True, vertical='center')
+    adjust_column_widths(ws) # Adjust column widths for all sheets
+
 if "Host Info" in wb.sheetnames: 
     host_info_sheet = wb["Host Info"]
     merge_cells_for_column(host_info_sheet, 4)  # Merge "Initiators" column (column 4)
