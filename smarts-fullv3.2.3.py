@@ -2105,7 +2105,7 @@ if "Host Info" in wb.sheetnames:
     merge_cells_for_column(host_info_sheet, 5)  # Merge "Targets" column (column 5) 
     merge_cells_for_column(host_info_sheet, 6)  # Merge "Connection type" column (column 6)
 if "LOM" in wb.sheetnames:
-    lom_sheet = wb["LOM" #Merge first column (Module Name)]
+    lom_sheet = wb["LOM"] #Merge first column (Module Name)
     merge_cells_for_column(lom_sheet, 1) #Merge first column (Module Name)
 wb.save(excel_path)
 print("SMART data, device info, and host info extracted and written to the Excel file with proper formatting.")
