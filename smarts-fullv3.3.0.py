@@ -16,6 +16,7 @@ from pathlib import Path
 import time
 from collections import defaultdict
 from collections import Counter
+from openpyxl.styles import Border, Side
 # Define required parameters
 ssd_params = [
     "Reallocated_Sector_Ct",
@@ -1405,6 +1406,59 @@ def lom_chassis(is_hdd):
            })
 
     return chassis_lom
+
+def chassis_chart():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    systemstat_dir = os.path.join(script_dir, "Logs")
+    systemstat_file = sorted(glob.glob(os.path.join(systemstat_dir, "system_status_20*.txt")), reverse=True)
+    input_file = systemstat_file[0] if systemstat_file else None
+
+    with open(input_file, 'r') as f:
+        data = json.load(f)
+        # Extract enclosures_data
+        enclosures = data.get('SAB', {}).get('enclosures_data', {})
+        chart_results = []
+        results = [
+            {
+                'encID': int(enc_id),
+                'Port': "Front" if values[0] == "Port 0 - 3" else "Back",
+                'Chassis Type': "DPE" if values[1] == "1" else "DAE1" if values[1] == "2" else "DAE2",
+                'sort_key': int(values[1])  # Keep original for sorting
+            }
+            for enc_id, values in enclosures.items()
+        ]
+
+        # Sort by the original numeric value
+        results.sort(key=lambda x: x['sort_key'])
+
+        # Remove the temporary sort key
+        for item in results:
+            item.pop('sort_key')
+        #adding an empty row first
+        chart_results.append({
+            'encID': "",
+            'Port': "",
+            'Chassis Type': ""
+            })
+        chart_results.append(results[0])
+    
+        # Iterate through the rest of the items
+        for i in range(1, len(results)):
+            current = results[i]
+            previous = results[i-1]
+        
+            # If jbodID changes, add flash sign
+            if current["Chassis Type"] != previous["Chassis Type"]:
+                chart_results.append({
+                    'encID': "",
+                    'Port': "",
+                    'Chassis Type': "↓↓"
+                })
+        
+            # Add the current item
+            chart_results.append(current)
+    return chart_results
+    
 #Gather data for pool sheet
 def pool_info():
     #it should be in the format of [Name, RAID type, number of disks, Size, LUNS, Hotspares]
@@ -1754,7 +1808,7 @@ log_date = get_date()
 year, month, day = parse_date(log_date)
 jalalidate = convertdate(year, month, day)
 ID = get_ID()
-
+chassischart = chassis_chart()
 # Read the log files
 try:
     with open(smarts_file_path, "r") as file:
@@ -1975,12 +2029,17 @@ with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
             dfs.append(pd.DataFrame(lom_cards_final))
         df_combined = pd.concat(dfs, ignore_index=True)
         df_combined.to_excel(writer, sheet_name="LOM", index=False)
-                        
+    if chassischart:
+        dfs_chart = pd.DataFrame(chassischart)
+        dfs_chart.to_excel(writer, sheet_name="Chassis Scheme", index=False)
+
 # Open the Excel file and format it
 wb = load_workbook(excel_path)
 yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 orange_fill = PatternFill(start_color="FFA500", end_color="FFFF00", fill_type="solid")
 red_fill = PatternFill(start_color="de0a0a", end_color="FFFF00", fill_type="solid")
+green_fill = PatternFill(start_color="bbe33d", end_color="FFFF00", fill_type="solid")
+grey_fill = PatternFill(start_color="cccccc", end_color="FFFF00", fill_type="solid")
 #Colour cells based on thresholds
 if "SMART Data" in wb.sheetnames:
     ws = wb["SMART Data"]
@@ -2046,6 +2105,32 @@ if "SMART Data" in wb.sheetnames:
             raw_value_cell.fill = yellow_fill
         if is_unused_rsvd:
             raw_value_cell.fill = PatternFill()
+#Coloring the chassis sheet
+if "Chassis Scheme" in wb.sheetnames:
+
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    ws = wb["Chassis Scheme"]
+    for row in ws.iter_rows(min_row=2): # Skip header row (row 1)
+        chassistype = row[2]
+        port = row[1]
+        port_value = port.value
+        chassistype_value = chassistype.value
+        if port_value == "Front":
+            for cell in row:
+                cell.fill = grey_fill
+        if chassistype_value == "DPE":
+            chassistype.fill = green_fill
+            for cell in row:
+                cell.border = thin_border
+        elif chassistype_value == "DAE1" or chassistype_value == "DAE2":
+            chassistype.fill = yellow_fill
+            for cell in row:
+                cell.border = thin_border
 
 # Function to merge cells for a specific column
 def merge_cells_for_column(ws, col_idx):
@@ -2105,7 +2190,7 @@ if "Host Info" in wb.sheetnames:
     merge_cells_for_column(host_info_sheet, 5)  # Merge "Targets" column (column 5) 
     merge_cells_for_column(host_info_sheet, 6)  # Merge "Connection type" column (column 6)
 if "LOM" in wb.sheetnames:
-    lom_sheet = wb["LOM"] #Merge first column (Module Name)
+    lom_sheet = wb["LOM"] #Merge first column (Module Name)]
     merge_cells_for_column(lom_sheet, 1) #Merge first column (Module Name)
 wb.save(excel_path)
 print("SMART data, device info, and host info extracted and written to the Excel file with proper formatting.")
