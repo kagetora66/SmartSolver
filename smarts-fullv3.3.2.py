@@ -959,6 +959,12 @@ def extract_host_info():
                                 host_map[initiator] = host_row[0] if host_row else "Not Found"
                             else:
                                 host_map[initiator] = "Not Found"
+                        for lun in unique_luns:
+                            cursor.execute(
+                                'SELECT "fe_name" FROM lun_name_mapper WHERE "be_name" = ?',
+                                (lun,))
+                            lun_fe = cursor.fetchone()
+                            lun = lun_fe[0]
 
                 # Group initiators and LUNs by host
                 host_luns_initiators = {}
