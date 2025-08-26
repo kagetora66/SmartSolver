@@ -112,8 +112,17 @@ partnums_chassis = [
     {"Type": "Chenbro", "Size": "2U", "FF": "24", "Description": "HPDS SAB-AF-80 B-Series All-Flash SAN Storage", "Part Number": "PBA-B080"},
     {"Type": "Chenbro", "Size": "2U", "FF": "12", "Description": "HPDS SAB-AF-50 B-Series All-Flash SAN Storage", "Part Number": "PBA-B050"},
     {"Type": "SuperMicro", "Size": "2U", "FF": "24", "Description": "HPDS SAB-AF-80 A-Series All-Flash SAN Storage", "Part Number": "PBA-A050"},
+    {"Type": "Chenbro", "Expander": 1, "Size": "2U", "FF": "24", "Description": "HPDS 2U 24x2.5in Single-Expander SAS Enclosure", "Part Number": "PE-2U2524B"},
+    {"Type": "Chenbro", "Expander": 1, "Size": "2U", "FF": "12", "Description": "HPDS 2U 12x3.5in Single-Expander SAS Enclosure", "Part Number": "PE-2U3512B"},
+    {"Type": "SuperMicro", "Expander": 1, "Size": "4U", "FF": "36", "Description": "HPDS 4U 36x3.5in Single-Expander SAS Enclosure", "Part Number": "PE-4U3536A"},
+    {"Type": "SuperMicro", "Expander": 1,  "Size": "4U", "FF": "24", "Description": "HPDS 4U 24x3.5in Single-Expander SAS Enclosure", "Part Number": "PE-4U3524A"},
+    {"Type": "Gooxi", "Expander": 1,  "Size": "4U", "FF": "36", "Description": "HPDS 4U 36x3.5in Single-Expander SAS Enclosure", "Part Number": "PE-4U3536C"},
+    {"Type": "Chenbro", "Expander": 1,  "Size": "4U", "FF": "24", "Description": "HPDS 4U 24x3.5in Single-Expander SAS Enclosure", "Part Number": "PE-4U3524B"},
+    {"Type": "SuperMicro", "Expander": 2,  "Size": "2U", "FF": "24", "Description": "HPDS 2U 24x2.5in Dual-Expander SAS Enclosure", "Part Number": "DE-2U2524A"},
+    {"Type": "SuperMicro", "Expander": 2,  "Size": "2U", "FF": "12", "Description": "HPDS 2U 12x3.5in Dual-Expander SAS Enclosure", "Part Number": "DE-2U3512A"},
+    {"Type": "SuperMicro", "Expander": 2,  "Size": "4U", "FF": "24", "Description": "HPDS 4U 24x3.5in Dual-Expander SAS Enclosure", "Part Number": "DE-4U3524A"},
+    {"Type": "SuperMicro", "Expander": 2,  "Size": "4U", "FF": "36", "Description": "HPDS 4U 36x3.5in Dual-Expander SAS Enclosure", "Part Number": "DE-4U3536A"},
 ]
-
 smart_pattern = re.compile(
     r"(\d+)\s+([\w_]+)\s+0x[0-9a-fA-F]+\s+(\d+)\s+\d+\s+(\d+)\s+\w+-?\w*\s+\w+\s+-\s+(\d+)"
 )
@@ -1198,7 +1207,7 @@ def consolidate_by_serial(smart_list):
 def lom_disk(disk_dicts):
     type_size_list = []
     disk_data = consolidate_by_serial(disk_dicts)
-
+    module = "Drive"
     for d in disk_data:
         interface = d.get("Interface", "").strip()
         size = d.get("Size", "").strip()
@@ -1214,6 +1223,7 @@ def lom_disk(disk_dicts):
         for part in partnums:
             if  part["Type"] == Type and part["Size"] == size and part["Interface"] == interface:
                 lom_disk_count.append({
+                    "Module Name": module,
                     "Description": part["Description"],
                     "Part Number": part["Part Number"],
                     "Count": count
@@ -1223,7 +1233,6 @@ def lom_disk(disk_dicts):
 def lom_cards():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
-
     with open(sysinfo_file, "r") as file:
         file_content = file.read()
 
@@ -1289,6 +1298,7 @@ def merge_duplicate_dicts(dict_list):
 #This part parses the information genereted by lom_ports into format suitable for LOM sheet
 def lom_card_parcer(cards):
     lom_cards = []
+    module = "Host Board"
     for card in cards:
         speed = 0
         Type = card["Card"]
@@ -1311,6 +1321,7 @@ def lom_card_parcer(cards):
         for part in partnums_card:
             if ports != 1 and part["Type"] == Type and part["Ports"] == ports and part["Speed"] == speed:
                 lom_cards.append({
+                    "Module Name": module,
                     "Description": part["Description"],
                     "Part Number": part["Part Number"],
                     "Count": count
@@ -1333,7 +1344,10 @@ def lom_chassis(is_hdd):
     sab_model = "DT"
     size = "2U"
     ff = "12" #default
-    chassis_type = "Chenbro"
+    module = "Chassis"
+    """TODO : JBOD code needs reworking to catch all types. For now, chassis type and sizes are assumed the same as DPE. (group JBODS together from systemstatus and search by enclosure for type"""
+    chassis_type = "Chenbro" #default because i have no idea how gooxi is inside logs
+    is_jbod = False
     #This is how we detect ALL FLASH, if there is no data for hdd at all!
     if is_hdd == True:
         is_allflash = False
@@ -1347,31 +1361,49 @@ def lom_chassis(is_hdd):
             if "CPU2" in line:
                 sab_model = "HB"
     with open(eall_file, "r") as file:
+        plane_cntr = 0
+        for line in file:
+            if "Port 0 - 3" in line:
+                #we detect the number of chassis by counting front planes
+                plane_cntr += 1
+    with open(eall_file, "r") as file:
+        if plane_cntr > 1:
+            is_jbod = True
         for line in file:
             if "Port 4 - 7" in line:
                 size = "4U"
                 ff = "36"
             if " 24 " in line and size == "2U":
-                size == "4U"
+                size = "4U"
                 ff = "24"
-    if os.path.exists(eall_show_file):
-        with open(eall_show_file, "r") as file:
-            for line in file:
-                if "SMC" in line:
-                    chassis_type = "SuperMicro"
-    else:
-        print("No eall_show_all file is found")
+    with open(eall_show_file, "r") as file:
+        for line in file:
+            if "SMC" in line:
+                chassis_type = "SuperMicro"
     if sab_model == "DT":
         sab_model = "DT"
     elif is_allflash:
         sab_model = "AF"
+    if plane_cntr >2:
+        expander = 2
+    else:
+        expander = 1
     for part in partnums_chassis:
-        if  part["Type"] == chassis_type and part["FF"] == ff and part["Size"] == size and sab_model in part["Description"]:
+        if part["Type"] == chassis_type and part["FF"] == ff and part["Size"] == size and sab_model in part["Description"]:
             chassis_lom.append({
+                "Module Name": module,
                 "Description": part["Description"],
                 "Part Number": part["Part Number"],
-                "Count": "1"
+                "Count": 1
             })
+        if is_jbod and part["Type"] == chassis_type and part["FF"] == ff and part["Size"] == size and "Enclosure" in part["Description"] and part["Expander"] == expander: 
+           chassis_lom.append({
+               "Module Name": module,
+               "Description": part["Description"],
+               "Part Number": part["Part Number"],
+               "Count": plane_cntr - 1
+           })
+
     return chassis_lom
 #Gather data for pool sheet
 def pool_info():
@@ -2071,7 +2103,10 @@ if "Host Info" in wb.sheetnames:
     host_info_sheet = wb["Host Info"]
     merge_cells_for_column(host_info_sheet, 4)  # Merge "Initiators" column (column 4)
     merge_cells_for_column(host_info_sheet, 5)  # Merge "Targets" column (column 5) 
-    merge_cells_for_column(host_info_sheet, 6)  # Merge "Connection type" column (column 6) 
+    merge_cells_for_column(host_info_sheet, 6)  # Merge "Connection type" column (column 6)
+if "LOM" in wb.sheetnames:
+    lom_sheet = wb["LOM" #Merge first column (Module Name)]
+    merge_cells_for_column(lom_sheet, 1) #Merge first column (Module Name)
 wb.save(excel_path)
 print("SMART data, device info, and host info extracted and written to the Excel file with proper formatting.")
 Path("python_done.flag").touch()
