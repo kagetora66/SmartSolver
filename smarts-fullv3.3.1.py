@@ -1208,7 +1208,7 @@ def consolidate_by_serial(smart_list):
 def lom_disk(disk_dicts):
     type_size_list = []
     disk_data = consolidate_by_serial(disk_dicts)
-    module = "Drive"
+    module = "Disk/Drive"
     for d in disk_data:
         interface = d.get("Interface", "").strip()
         size = d.get("Size", "").strip()
@@ -1421,7 +1421,7 @@ def chassis_chart():
         results = [
             {
                 'encID': int(enc_id),
-                'Port': "Front" if values[0] == "Port 0 - 3" else "Back",
+                'Position': "Front" if values[0] == "Port 0 - 3" else "Back",
                 'Chassis Type': "DPE" if values[1] == "1" else "DAE1" if values[1] == "2" else "DAE2",
                 'sort_key': int(values[1])  # Keep original for sorting
             }
@@ -1437,7 +1437,7 @@ def chassis_chart():
         #adding an empty row first
         chart_results.append({
             'encID': "",
-            'Port': "",
+            'Position': "",
             'Chassis Type': ""
             })
         chart_results.append(results[0])
@@ -1451,7 +1451,7 @@ def chassis_chart():
             if current["Chassis Type"] != previous["Chassis Type"]:
                 chart_results.append({
                     'encID': "",
-                    'Port': "",
+                    'Position': "",
                     'Chassis Type': "↓↓"
                 })
         
