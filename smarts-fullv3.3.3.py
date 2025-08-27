@@ -936,7 +936,7 @@ def extract_host_info():
 
                 sab_db_file = os.path.join(db_dir, "sab.db")
                 host_map = {}
-
+                lun_name_map = {}  # Dictionary to map backend LUN names to frontend names
                 if os.path.exists(sab_db_file):
                     with sqlite3.connect(sab_db_file) as conn:
                         cursor = conn.cursor()
@@ -959,13 +959,16 @@ def extract_host_info():
                                 host_map[initiator] = host_row[0] if host_row else "Not Found"
                             else:
                                 host_map[initiator] = "Not Found"
-                        for lunid, lun in unique_luns:
+                        for lunid, lun_be_name in unique_luns:
                             cursor.execute(
                                 'SELECT "fe_name" FROM lun_name_mapper WHERE "be_name" = ?',
-                                (lun,)
+                                (lun_be_name,)
                             )
-                            lun_fe = cursor.fetchone()
-                            lun = lun_fe[0] if lun_fe else None 
+                            lun_fe_row = cursor.fetchone()
+                            if lun_fe_row:
+                                lun_name_map[lun_be_name] = lun_fe_row[0]
+                            else:
+                                lun_name_map[lun_be_name] = lun_be_name
 
                 # Group initiators and LUNs by host
                 host_luns_initiators = {}
@@ -979,6 +982,11 @@ def extract_host_info():
                     host_luns_initiators[host_name]["luns"].update(
                         [lun[1] for lun in unique_luns if lun[1] != "device_null"]
                     )
+            # Add LUNs with frontend names if available
+                    for lun_id, lun_be_name in unique_luns:
+                        if lun_be_name != "device_null":
+                            lun_fe_name = lun_name_map.get(lun_be_name, lun_be_name)
+                            host_luns_initiators[host_name]["luns"].add(lun_fe_name)
                     host_luns_initiators[host_name]["initiators"].append(initiator)
                     host_luns_initiators[host_name]["target_map"][initiator] = target_address
 
@@ -1614,27 +1622,6 @@ def pool_info():
                 raid["Hotspares"] = "-"
             if raid["Pool Drives"] == '':
                 raid["Pool Drives"] = "-"
-    #Add front end name for pools from database
-    for raid in pool_data:
-        db_dir = "./Database"
-        sab_db_file = os.path.join(db_dir, "sab.db")
-        if os.path.exists(sab_db_file):
-            with sqlite3.connect(sab_db_file) as conn:
-                cursor = conn.cursor()
-            
-                # Query to find matching FE name for this raid's Pool Name
-                cursor.execute(
-                    'SELECT "fe_name" FROM pool_name_mapper WHERE "be_name" = ?',
-                    (raid['Pool Name'],)
-                )
-            
-                result = cursor.fetchone()
-                # Add the FE name to the raid dictionary if found
-                raid['Pool Name-FE'] = result[0] if result else None
-        else:
-            raid['Pool Name-FE'] = None
-            print(f"Database not found at {sab_db_file}")
-
     #Adding information for luns of each pool. Names plus size. (for now we merge the lun name and size with this format )
     with open(lvm_info_path, "r") as file:
          # Split the log into blocks for each disk.
@@ -1668,10 +1655,39 @@ def pool_info():
                     raid["LUN Name"] = lun_name
                     raid["LUN Size"] = lun_size
                     raid_merge.append(raid)
+    #Add front end name for pools from database
+    for raids in raid_merge:
+        db_dir = "./Database"
+        sab_db_file = os.path.join(db_dir, "sab.db")
+        if os.path.exists(sab_db_file):
+            with sqlite3.connect(sab_db_file) as conn:
+                cursor = conn.cursor()
+            
+                # Query to find matching FE name for this raid's Pool Name
+                cursor.execute(
+                    'SELECT "fe_name" FROM pool_name_mapper WHERE "be_name" = ?',
+                    (raids['Pool Name'],)
+                )
+            
+                result = cursor.fetchone()
+                # Add the FE name to the raid dictionary if found
+                raids['Pool Name-FE'] = result[0] if result else None
+                cursor.execute(
+                    'SELECT "fe_name" FROM lun_name_mapper WHERE "be_name" = ?',
+                    (raids['LUN Name'],)
+                )
+                result_lun = cursor.fetchone()
+                #Add LUN frontend name
+                raids['LUN Name-FE'] = result_lun[0] if result_lun else None
+
+        else:
+            raid['Pool Name-FE'] = None
+            print(f"Database not found at {sab_db_file}")
+
+
     # Define the desired field order
-    field_order = ['dg', 'vd', 'Pool Size', 'Drive Size', 'Pool Name', 'Pool Name-FE', 'Pool Drives', 'LUN Name', 'LUN Size', 'Number of disks', 'Hotspares', 'RAID Type']
+    field_order = ['dg', 'vd', 'Pool Size', 'Drive Size', 'Pool Name', 'Pool Name-FE', 'Pool Drives', 'LUN Name', 'LUN Name-FE','LUN Size', 'Number of disks', 'Hotspares', 'RAID Type']
     # Create new sorted dictionaries
-    #print(raid_merge)
     sorted_pool_data = []
     for item in raid_merge:
         sorted_item = {field: item[field] for field in field_order if field in item}
