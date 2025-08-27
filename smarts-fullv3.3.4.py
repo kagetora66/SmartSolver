@@ -646,6 +646,7 @@ def extract_device_info(log_content, enclosure):
              for enc in enclosure:
                  if serial_number == enc["Serial Number"]:
                      slot = enc["En/Slot"]
+                     interface = enc["Interface"]
                      model = enc["Device Model"]
                      if enc["Parameter"] == "Total Size Written (TB)":
                          tsw = enc["Raw Value"]
@@ -661,6 +662,7 @@ def extract_device_info(log_content, enclosure):
                  hours = hours_match.group(1)
              tmp_data.append({
                 "Enc/Slot": slot,
+                "Interface": interface,
                 "Model": model,
                 "Serial Number": serial_number,
                 "Temperature": temperature,
@@ -681,6 +683,7 @@ def extract_device_info(log_content, enclosure):
                  hours = hours_match_sam.group(1)
              data.append({
                  "Enc/Slot": slot,
+                 "Interface": interface,
                  "Model": model,
                  "Serial Number": serial_number,
                  "Temperature": temperature,
@@ -861,10 +864,10 @@ def extract_host_info():
         return []
 
     # Checks for output.txt file inside script directory 
+    target_port_type = {}
     is_pmc = os.path.isfile(os.path.join(os.path.dirname(__file__), 'output.txt'))
     if is_pmc:
         pmc_output = "output.txt"
-        target_port_type = {}
         current_wwn = None
         with open(pmc_output, "r") as file:
             lines = file.readlines()
@@ -887,8 +890,23 @@ def extract_host_info():
                 current_wwn = None
                 target_port_type[current_wwn] = port_type
     else:
-        target_port_type = {}
-
+        systemstat_dir = os.path.join(script_dir, "Logs")
+        systemstat_file = sorted(glob.glob(os.path.join(systemstat_dir, "system_status_20*.txt")), reverse=True)
+        input_sys = systemstat_file[0] if systemstat_file else None
+        with open(input_sys, 'r') as f:
+            data = json.load(f)
+            fc_data = data.get('SAB', {}).get('fc_cards', {})
+            for card in fc_data:
+                fc_ports = card.get('fc_port', [])
+                for port in fc_ports:
+                    wwn = port.get('wwn')
+                    port_type = port.get('type')
+                    if 'NPort' in port_type:
+                        port_type = "SAN Switch (system_status)"
+                    elif 'Point' in port_type:
+                        port_type = "Point to Point (system status)"
+                    if wwn and port_type:
+                        target_port_type[wwn] = port_type.strip()  # .strip() to remove newlines
     try:
         with open(input_file, "r") as file:
             lines = file.readlines()
@@ -1686,7 +1704,7 @@ def pool_info():
 
 
     # Define the desired field order
-    field_order = ['dg', 'vd', 'Pool Size', 'Drive Size', 'Pool Name', 'Pool Name-FE', 'Pool Drives', 'LUN Name', 'LUN Name-FE','LUN Size', 'Number of disks', 'Hotspares', 'RAID Type']
+    field_order = ['dg', 'vd', 'RAID Type', 'Drive Size', 'Pool Name', 'Pool Name-FE','Pool Size', 'Number of disks', 'Pool Drive', 'Hotspares', 'LUN Name', 'LUN Name-FE', 'LUN Size']
     # Create new sorted dictionaries
     sorted_pool_data = []
     for item in raid_merge:
