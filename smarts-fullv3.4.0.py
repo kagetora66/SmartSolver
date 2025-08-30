@@ -893,20 +893,21 @@ def extract_host_info():
         systemstat_dir = os.path.join(script_dir, "Logs")
         systemstat_file = sorted(glob.glob(os.path.join(systemstat_dir, "system_status_20*.txt")), reverse=True)
         input_sys = systemstat_file[0] if systemstat_file else None
-        with open(input_sys, 'r') as f:
-            data = json.load(f)
-            fc_data = data.get('SAB', {}).get('fc_cards', {})
-            for card in fc_data:
-                fc_ports = card.get('fc_port', [])
-                for port in fc_ports:
-                    wwn = port.get('wwn')
-                    port_type = port.get('type')
-                    if 'NPort' in port_type:
-                        port_type = "SAN Switch (system_status)"
-                    elif 'Point' in port_type:
-                        port_type = "Point to Point (system status)"
-                    if wwn and port_type:
-                        target_port_type[wwn] = port_type.strip()  # .strip() to remove newlines
+        if input_sys:
+            with open(input_sys, 'r') as f:
+                data = json.load(f)
+                fc_data = data.get('SAB', {}).get('fc_cards', {})
+                for card in fc_data:
+                    fc_ports = card.get('fc_port', [])
+                    for port in fc_ports:
+                        wwn = port.get('wwn')
+                        port_type = port.get('type')
+                        if 'NPort' in port_type:
+                            port_type = "SAN Switch(system_status)"
+                        elif 'Point' in port_type:
+                            port_type = "Point to Point(system_status)"
+                        if wwn and port_type:
+                            target_port_type[wwn] = port_type.strip()  # .strip() to remove newlines
     try:
         with open(input_file, "r") as file:
             lines = file.readlines()
@@ -1005,6 +1006,8 @@ def extract_host_info():
                         if lun_be_name != "device_null":
                             lun_fe_name = lun_name_map.get(lun_be_name, lun_be_name)
                             host_luns_initiators[host_name]["luns"].add(lun_fe_name)
+                            host_luns_initiators[host_name]["luns"].remove(lun_be_name)
+
                     host_luns_initiators[host_name]["initiators"].append(initiator)
                     host_luns_initiators[host_name]["target_map"][initiator] = target_address
 
@@ -1410,10 +1413,13 @@ def lom_chassis(is_hdd):
             if " 24 " in line and size == "2U":
                 size = "4U"
                 ff = "24"
-    with open(eall_show_file, "r") as file:
-        for line in file:
-            if "SMC" in line:
-                chassis_type = "SuperMicro"
+    if os.path.exists(eall_show_file):
+        with open(eall_show_file, "r") as file:
+            for line in file:
+                if "SMC" in line:
+                    chassis_type = "SuperMicro"
+    else:
+        chassis_type = "-"
     if sab_model == "DT":
         sab_model = "DT"
     elif is_allflash:
@@ -1439,13 +1445,13 @@ def lom_chassis(is_hdd):
            })
 
     return chassis_lom
-
 def chassis_chart():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     systemstat_dir = os.path.join(script_dir, "Logs")
     systemstat_file = sorted(glob.glob(os.path.join(systemstat_dir, "system_status_20*.txt")), reverse=True)
     input_file = systemstat_file[0] if systemstat_file else None
-
+    if input_file == None:
+        return []
     with open(input_file, 'r') as f:
         data = json.load(f)
         # Extract enclosures_data
@@ -1455,7 +1461,7 @@ def chassis_chart():
             {
                 'encID': int(enc_id),
                 'Position': "Front" if values[0] == "Port 0 - 3" else "Back",
-                'Chassis Type': "DPE" if values[1] == "1" else "DAE1" if values[1] == "2" else "DAE2",
+                'Chassis Type': "DPE" if values[1] == "1" else "DAE1" if values[1] == "2" else "DAE2" if values[1] == "3" else "DPE",
                 'sort_key': int(values[1])  # Keep original for sorting
             }
             for enc_id, values in enclosures.items()
@@ -1491,7 +1497,7 @@ def chassis_chart():
             # Add the current item
             chart_results.append(current)
     return chart_results
-    
+   
 #Gather data for pool sheet
 def pool_info():
     #it should be in the format of [Name, RAID type, number of disks, Size, LUNS, Hotspares]
@@ -1704,7 +1710,7 @@ def pool_info():
 
 
     # Define the desired field order
-    field_order = ['dg', 'vd', 'RAID Type', 'Drive Size', 'Pool Name', 'Pool Name-FE','Pool Size', 'Number of disks', 'Pool Drive', 'Hotspares', 'LUN Name', 'LUN Name-FE', 'LUN Size']
+    field_order = ['dg', 'vd', 'RAID Type', 'Drive Size', 'Pool Name', 'Pool Name-FE','Pool Size', 'Number of disks', 'Pool Drives', 'Hotspares', 'LUN Name', 'LUN Name-FE', 'LUN Size']
     # Create new sorted dictionaries
     sorted_pool_data = []
     for item in raid_merge:
@@ -2076,11 +2082,13 @@ with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
 
 # Open the Excel file and format it
 wb = load_workbook(excel_path)
-yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+yellow_fill = PatternFill(start_color="ffffa6", end_color="FFFF00", fill_type="solid")
 orange_fill = PatternFill(start_color="FFA500", end_color="FFFF00", fill_type="solid")
 red_fill = PatternFill(start_color="de0a0a", end_color="FFFF00", fill_type="solid")
 green_fill = PatternFill(start_color="bbe33d", end_color="FFFF00", fill_type="solid")
 grey_fill = PatternFill(start_color="cccccc", end_color="FFFF00", fill_type="solid")
+brown_fill = PatternFill(start_color="8d281e", end_color="FFFF00", fill_type="solid")
+
 #Colour cells based on thresholds
 if "SMART Data" in wb.sheetnames:
     ws = wb["SMART Data"]
@@ -2090,11 +2098,38 @@ if "SMART Data" in wb.sheetnames:
         value_cell = row[8]      # Column I (Value)
         raw_value_cell = row[9]  # Column J (Raw Value)
         param_value_cell = row[6]
+        other_error_cell = row[12]
+        shield_cnt_cell = row[13]
+        predict_fail_cell = row[14]
 
         param_str = param_value_cell.value
         threshold_str = threshold_cell.value
         value_str = value_cell.value
         raw_value_str = raw_value_cell.value
+        other_error_str = other_error_cell.internal_value
+        shield_cnt_str = shield_cnt_cell.internal_value
+        predict_fail_str = predict_fail_cell.internal_value
+
+        if other_error_str != None:
+            if other_error_str != '-':
+                other_error_value = int(other_error_str)
+                if 10 < other_error_value < 35:
+                    other_error_cell.fill = yellow_fill
+                if 36 < other_error_value <70:
+                    other_error_cell.fill = orange_fill
+                if 70 < other_error_value <100:
+                    other_error_cell.fill = red_fill
+                if 100 < other_error_value:
+                    other_error_cell.fill = brown_fill
+
+
+        if shield_cnt_str != None:
+            if shield_cnt_str != '-':
+                shield_cnt_cell.fill = red_fill
+        if predict_fail_str != None:
+            if predict_fail_str != '-':
+                predict_fail_cell.fill = red_fill
+
         #We dont want to color this cell
         is_unused_rsvd = False
         if param_str == "Unused_Rsvd_Blk_Cnt_Tot":
@@ -2172,7 +2207,14 @@ if "Chassis Scheme" in wb.sheetnames:
             chassistype.fill = yellow_fill
             for cell in row:
                 cell.border = thin_border
-
+if "Host Info" in wb.sheetnames:
+    ws = wb["Host Info"]
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            if cell.value == "Unknown":
+                cell.fill = orange_fill
+            if cell.value == "SAN Switch(system_status)" or cell.value == "Point to Point(system_status)":
+                cell.fill = yellow_fill
 # Function to merge cells for a specific column
 def merge_cells_for_column(ws, col_idx):
     prev_value = None
