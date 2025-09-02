@@ -1834,7 +1834,7 @@ def get_ID():
     if log_files:
         log_file = log_files[0]
         filename = os.path.basename(log_files[0])
-        match = re.search(r'full_log(.+?)_(\d{4}-\d{2}-\d{2})', "full_log_ID_490_2025-29-06_13-28-22_complete.zip")
+        match = re.search(r'full_log(.+?)_(\d{4}-\d{2}-\d{2})', filename)
         if match:
             ID = match.group(1)
             return ID
