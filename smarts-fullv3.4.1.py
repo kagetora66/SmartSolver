@@ -895,19 +895,20 @@ def extract_host_info():
         input_sys = systemstat_file[0] if systemstat_file else None
         if input_sys:
             with open(input_sys, 'r') as f:
-                data = json.load(f)
-                fc_data = data.get('SAB', {}).get('fc_cards', {})
-                for card in fc_data:
-                    fc_ports = card.get('fc_port', [])
-                    for port in fc_ports:
-                        wwn = port.get('wwn')
-                        port_type = port.get('type')
-                        if 'NPort' in port_type:
-                            port_type = "SAN Switch(system_status)"
-                        elif 'Point' in port_type:
-                            port_type = "Point to Point(system_status)"
-                        if wwn and port_type:
-                            target_port_type[wwn] = port_type.strip()  # .strip() to remove newlines
+                if f.read().strip(): 
+                    data = json.load(f)
+                    fc_data = data.get('SAB', {}).get('fc_cards', {})
+                    for card in fc_data:
+                        fc_ports = card.get('fc_port', [])
+                        for port in fc_ports:
+                            wwn = port.get('wwn')
+                            port_type = port.get('type')
+                            if 'NPort' in port_type:
+                                port_type = "SAN Switch(system_status)"
+                            elif 'Point' in port_type:
+                                port_type = "Point to Point(system_status)"
+                            if wwn and port_type:
+                                target_port_type[wwn] = port_type.strip()  # .strip() to remove newlines
     try:
         with open(input_file, "r") as file:
             lines = file.readlines()
@@ -1450,52 +1451,54 @@ def chassis_chart():
     systemstat_dir = os.path.join(script_dir, "Logs")
     systemstat_file = sorted(glob.glob(os.path.join(systemstat_dir, "system_status_20*.txt")), reverse=True)
     input_file = systemstat_file[0] if systemstat_file else None
+    chart_results = []
+
     if input_file == None:
         return []
     with open(input_file, 'r') as f:
-        data = json.load(f)
-        # Extract enclosures_data
-        enclosures = data.get('SAB', {}).get('enclosures_data', {})
-        chart_results = []
-        results = [
-            {
-                'encID': int(enc_id),
-                'Position': "Front" if values[0] == "Port 0 - 3" else "Back",
-                'Chassis Type': "DPE" if values[1] == "1" else "DAE1" if values[1] == "2" else "DAE2" if values[1] == "3" else "DPE",
-                'sort_key': int(values[1])  # Keep original for sorting
-            }
-            for enc_id, values in enclosures.items()
-        ]
+        if f.read().strip():
+            data = json.load(f)
+            # Extract enclosures_data
+            enclosures = data.get('SAB', {}).get('enclosures_data', {})
+            results = [
+                {
+                    'encID': int(enc_id),
+                    'Position': "Front" if values[0] == "Port 0 - 3" else "Back",
+                    'Chassis Type': "DPE" if values[1] == "1" else "DAE1" if values[1] == "2" else "DAE2" if values[1] == "3" else "DPE",
+                    'sort_key': int(values[1])  # Keep original for sorting
+                }
+                for enc_id, values in enclosures.items()
+            ]
 
-        # Sort by the original numeric value
-        results.sort(key=lambda x: x['sort_key'])
+            # Sort by the original numeric value
+            results.sort(key=lambda x: x['sort_key'])
 
-        # Remove the temporary sort key
-        for item in results:
-            item.pop('sort_key')
-        #adding an empty row first
-        chart_results.append({
-            'encID': "",
-            'Position': "",
-            'Chassis Type': ""
-            })
-        chart_results.append(results[0])
+            # Remove the temporary sort key
+            for item in results:
+                item.pop('sort_key')
+            #adding an empty row first
+            chart_results.append({
+                'encID': "",
+                'Position': "",
+                'Chassis Type': ""
+                })
+            chart_results.append(results[0])
     
         # Iterate through the rest of the items
-        for i in range(1, len(results)):
-            current = results[i]
-            previous = results[i-1]
+            for i in range(1, len(results)):
+                current = results[i]
+                previous = results[i-1]
         
-            # If jbodID changes, add flash sign
-            if current["Chassis Type"] != previous["Chassis Type"]:
-                chart_results.append({
-                    'encID': "",
-                    'Position': "",
-                    'Chassis Type': "↓↓"
-                })
+                # If jbodID changes, add flash sign
+                if current["Chassis Type"] != previous["Chassis Type"]:
+                    chart_results.append({
+                        'encID': "",
+                        'Position': "",
+                        'Chassis Type': "↓↓"
+                    })
         
-            # Add the current item
-            chart_results.append(current)
+                # Add the current item
+                chart_results.append(current)
     return chart_results
    
 #Gather data for pool sheet
@@ -1829,7 +1832,7 @@ def get_ID():
     if log_files:
         log_file = log_files[0]
         filename = os.path.basename(log_files[0])
-        match = re.search(r'full_log(.+?)_(\d{4}-\d{2}-\d{2})', filename)
+        match = re.search(r'full_log(.+?)_(\d{4}-\d{2}-\d{2})', "full_log_ID_490_2025-29-06_13-28-22_complete.zip")
         if match:
             ID = match.group(1)
             return ID
