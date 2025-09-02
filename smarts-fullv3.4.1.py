@@ -895,8 +895,9 @@ def extract_host_info():
         input_sys = systemstat_file[0] if systemstat_file else None
         if input_sys:
             with open(input_sys, 'r') as f:
-                if f.read().strip(): 
-                    data = json.load(f)
+                content = f.read()
+                if content.strip(): 
+                    data = json.loads(content)
                     fc_data = data.get('SAB', {}).get('fc_cards', {})
                     for card in fc_data:
                         fc_ports = card.get('fc_port', [])
@@ -1456,8 +1457,9 @@ def chassis_chart():
     if input_file == None:
         return []
     with open(input_file, 'r') as f:
-        if f.read().strip():
-            data = json.load(f)
+        content = f.read()
+        if content.strip():
+            data = json.loads(content)
             # Extract enclosures_data
             enclosures = data.get('SAB', {}).get('enclosures_data', {})
             results = [
