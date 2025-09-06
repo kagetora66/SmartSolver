@@ -648,6 +648,7 @@ def extract_device_info(log_content, enclosure):
                      slot = enc["En/Slot"]
                      interface = enc["Interface"]
                      model = enc["Device Model"]
+                     state = enc["Disk State"]
                      if enc["Parameter"] == "Total Size Written (TB)":
                          tsw = enc["Raw Value"]
                          tsw_waf2 = float(tsw) * 2
@@ -664,6 +665,7 @@ def extract_device_info(log_content, enclosure):
                 "Enc/Slot": slot,
                 "Interface": interface,
                 "Model": model,
+                "Disk State": state,
                 "Serial Number": serial_number,
                 "Temperature": temperature,
                 "Powered Up Hours": hours,
@@ -685,6 +687,7 @@ def extract_device_info(log_content, enclosure):
                  "Enc/Slot": slot,
                  "Interface": interface,
                  "Model": model,
+                 "Disk State": state,
                  "Serial Number": serial_number,
                  "Temperature": temperature,
                  "Powered Up Hours": hours,
