@@ -1844,10 +1844,35 @@ def get_ID():
         return "SAB"
 def output_name(ID, Date):
     return "smart" + "-"+ ID + "_" + Date + ".xlsx"
+#Change log name for old logs
+
+def fixname(scriptdir):
+    # Find all .log files in the directory
+    log_files = glob.glob(os.path.join(scriptdir, "*.log"))
+    
+    for old_log_path in log_files:
+        if os.path.isfile(old_log_path):
+            # Extract the original filename without extension
+            original_name = os.path.basename(old_log_path).replace('.log', '')
+            
+            # Create new filename
+            new_name = f"full_log_{original_name}.zip"
+            new_log_path = os.path.join(scriptdir, new_name)
+            
+            # Rename the file
+            try:
+                os.rename(old_log_path, new_log_path)
+                print(f"Renamed: {old_log_path} -> {new_log_path}")
+            except OSError as e:
+                print(f"Error renaming {old_log_path}: {e}")
+
+
+        
 ################################## main part of script ##########################################
 #Extract files
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isfile(os.path.join(script_dir, 'version')):
+    fixname(script_dir)
     extractor()
 # Path to the smarts.mylinux file in the /SystemOverallInfo directory
 smarts_file_path = os.path.join(script_dir, "SystemOverallInfo", "smarts.mylinux")
