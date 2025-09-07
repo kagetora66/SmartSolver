@@ -82,10 +82,10 @@ partnums = [
     {"Type": "SSD", "Interface": "SATA", "Size": "1.92 TB", "Description": "HPDS 1.9TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-1900"},
     {"Type": "SSD", "Interface": "SATA", "Size": "3.84 TB", "Description": "HPDS 3.8TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-3800"},
     {"Type": "SSD", "Interface": "SATA", "Size": "7.68 TB", "Description": "HPDS 7.6TB SATA 6G Enterprise 2.5in SSD", "Part Number": "PD-SDDD25-7600"},
-    {"Type": "SSD", "Interface": "SAS", "Size": "960 GB", "Description": "HPDS 960GB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-960"},
-    {"Type": "SSD", "Interface": "SAS", "Size": "1.92 TB", "Description": "HPDS 1.9TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-1920"},
-    {"Type": "SSD", "Interface": "SAS", "Size": "3.84 TB", "Description": "HPDS 3.8TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-3840"},
-    {"Type": "SSD", "Interface": "SAS", "Size": "7.68 TB", "Description": "HPDS 7.6TB SAS 6G Enterprise 2.5in SSD", "Part Number": "DHBD-SSXXGG-7680"}
+    {"Type": "SSD", "Interface": "SAS", "Size": "960 GB", "Description": "HPDS 960GB SAS 6G Enterprise 2.5in SSD", "Part Number": "PD-SSDD-960"},
+    {"Type": "SSD", "Interface": "SAS", "Size": "1.92 TB", "Description": "HPDS 1.9TB SAS 6G Enterprise 2.5in SSD", "Part Number": "PD-SSDD-1920"},
+    {"Type": "SSD", "Interface": "SAS", "Size": "3.84 TB", "Description": "HPDS 3.8TB SAS 6G Enterprise 2.5in SSD", "Part Number": "PD-SSDD-3840"},
+    {"Type": "SSD", "Interface": "SAS", "Size": "7.68 TB", "Description": "HPDS 7.6TB SAS 6G Enterprise 2.5in SSD", "Part Number": "PD-SSDD-7680"}
 ]
 partnums_card = [
     {"Type": "FC", "Ports": 2, "Speed": "8Gb", "Description": "HPDS 8Gb 2-port PCIe Fiber Channel HBA", "Part Number": "PI-FM08G2P"},
@@ -1854,7 +1854,7 @@ def fixname(scriptdir):
     log_files = glob.glob(os.path.join(scriptdir, "*.log"))
     
     for old_log_path in log_files:
-        if os.path.isfile(old_log_path):
+        if os.path.isfile(old_log_path) and "RC" not in log_files:
             # Extract the original filename without extension
             original_name = os.path.basename(old_log_path).replace('.log', '')
             
