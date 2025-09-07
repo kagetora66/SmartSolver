@@ -1424,14 +1424,20 @@ def lom_chassis(is_hdd):
                 if "SMC" in line:
                     chassis_type = "SuperMicro"
     else:
-        chassis_type = "-"
+        output_file = os.path.join(script_dir, "output.txt")
+        if os.path.exists(output_file):
+            with open(output_file) as file:
+                for line in file:
+                    if "SMC" in line:
+                        chassis_type = "SuperMicro"
+        else:
+            print("No output file found, couldnt extract chassis model")
+            chassis_type = "-"
     if sab_model == "DT":
         sab_model = "DT"
     elif is_allflash:
         sab_model = "AF"
     if plane_cntr >2:
-        expander = 2
-    else:
         expander = 1
     for part in partnums_chassis:
         if part["Type"] == chassis_type and part["FF"] == ff and part["Size"] == size and sab_model in part["Description"]:
@@ -1848,26 +1854,27 @@ def get_ID():
 def output_name(ID, Date):
     return "smart" + "-"+ ID + "_" + Date + ".xlsx"
 #Change log name for old logs
-
-def fixname(scriptdir):
-    # Find all .log files in the directory
-    log_files = glob.glob(os.path.join(scriptdir, "*.log"))
-    
+#
+#def fixname(scriptdir):
+#    # Find all .log files in the directory
+#    log_files = glob.glob(os.path.join(scriptdir, "*.log"))
+#    
     for old_log_path in log_files:
-        if os.path.isfile(old_log_path) and "RC" not in log_files:
-            # Extract the original filename without extension
-            original_name = os.path.basename(old_log_path).replace('.log', '')
+        if "RC" not in old_log_path:
+            if os.path.isfile(old_log_path):
+                # Extract the original filename without extension
+                original_name = os.path.basename(old_log_path).replace('.log', '')
             
-            # Create new filename
-            new_name = f"full_log_{original_name}.zip"
-            new_log_path = os.path.join(scriptdir, new_name)
+                # Create new filename
+                new_name = f"full_log_{original_name}.zip"
+                new_log_path = os.path.join(scriptdir, new_name)
             
-            # Rename the file
-            try:
-                os.rename(old_log_path, new_log_path)
-                print(f"Renamed: {old_log_path} -> {new_log_path}")
-            except OSError as e:
-                print(f"Error renaming {old_log_path}: {e}")
+                # Rename the file
+                try:
+                    os.rename(old_log_path, new_log_path)
+                    print(f"Renamed: {old_log_path} -> {new_log_path}")
+                except OSError as e:
+                    print(f"Error renaming {old_log_path}: {e}")
 
 
         
@@ -1875,7 +1882,7 @@ def fixname(scriptdir):
 #Extract files
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if not os.path.isfile(os.path.join(script_dir, 'version')):
-    fixname(script_dir)
+#    fixname(script_dir)
     extractor()
 # Path to the smarts.mylinux file in the /SystemOverallInfo directory
 smarts_file_path = os.path.join(script_dir, "SystemOverallInfo", "smarts.mylinux")
