@@ -1401,7 +1401,8 @@ def lom_chassis(is_hdd):
     with open(sysinfo_file, "r") as file:
         for line in file:
             if "CPU2" in line:
-                sab_model = "HB"
+                if "OK" in line:
+                    sab_model = "HB"
     with open(eall_file, "r") as file:
         plane_cntr = 0
         for line in file:
