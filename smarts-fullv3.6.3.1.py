@@ -380,7 +380,7 @@ def extract_ssd_parameters(log_content):
                             "Interface": disk_type,
                             "Size": tb_value,
                             "Parameter": "Total Size Written (TB)-WAF(2)",
-                            "Threshold": str(round(threshold_samsung_write, -2)),
+                            "Threshold": str(threshold_samsung_write),
                             "Value": "-",
                             "Raw Value": f"{total_size_samsung_waf2:.2f}"
                         })
@@ -392,7 +392,7 @@ def extract_ssd_parameters(log_content):
                             "Interface": disk_type,
                             "Size": tb_value,
                             "Parameter": "Total Size Written (TB)-WAF(4)",
-                            "Threshold": str(round(threshold_samsung_write, -2)),
+                            "Threshold": str(threshold_samsung_write),
                             "Value": "-",
                             "Raw Value": f"{total_size_samsung_waf4:.2f}"
                         })
@@ -403,7 +403,7 @@ def extract_ssd_parameters(log_content):
                             "Interface": disk_type,
                             "Size": tb_value,
                             "Parameter": "Total Size Written (TB)-SSD_Ctl",
-                            "Threshold": str(round(threshold_samsung_write, -2)),
+                            "Threshold": str(threshold_samsung_write),
                             "Value": "-",
                             "Raw Value": f"{total_size_written_ssd:.2f}"
                         })
@@ -1688,6 +1688,9 @@ def pool_info():
             content,
             re.DOTALL
         )
+        for raid in pool_data: 
+            raid["LUN Name"] = "-"
+            raid["LUN Size"] = "-"
         if lv_section:       
             disk_blocks = re.findall(
                 r"--- Logical volume ---(.*?)Block device\s+",
@@ -1695,9 +1698,6 @@ def pool_info():
                 re.DOTALL
             )
             disk_blocks = [block.strip() for block in disk_blocks]
-        for raid in pool_data: 
-            raid["LUN Name"] = "-"
-            raid["LUN Size"] = "-"
         raid_merge = []
         for block in disk_blocks:
             for raids in pool_data:
@@ -1746,7 +1746,8 @@ def pool_info():
     field_order = ['dg', 'vd', 'RAID Type', 'Drive Size', 'Pool Name', 'Pool Name-FE','Pool Size', 'Number of disks', 'Pool Drives', 'Hotspares', 'LUN Name', 'LUN Name-FE', 'LUN Size']
     # Create new sorted dictionaries
     sorted_pool_data = []
-    for item in raid_merge:
+    #Here we ensure to add pools that dont have luns
+    for item in raid_merge if disk_blocks else pool_data:
         sorted_item = {field: item[field] for field in field_order if field in item}
         sorted_pool_data.append(sorted_item)
     
@@ -2142,9 +2143,16 @@ if __name__ == "__main__":
             df_device.to_excel(writer, sheet_name="Device Info", index=False)
         if pool_data:
             df_host = pd.DataFrame(pool_data)
-            df_host['LUN Name'] = df_host['LUN Name'].astype('string')
-            unique_df = df_host.drop_duplicates(subset = ["LUN Name"])
-            unique_df.to_excel(writer, sheet_name="Pool Data", index=False)
+#            df_host['LUN Name'] = df_host['LUN Name'].astype('string')
+            if not df_host['LUN Name'].eq("-").all():
+                df_host['LUN Name'] = df_host['LUN Name'].astype('string')
+                unique_df = df_host.drop_duplicates(subset = ["LUN Name"])
+                unique_df.to_excel(writer, sheet_name="Pool Data", index=False)
+                print("uniquei")
+            else:
+                print("main")
+                df_host.to_excel(writer, sheet_name="Pool Data", index=False)
+                
         # Write host information to the third sheet (only if non-empty)
         if host_data:
             df_host = pd.DataFrame(host_data)
