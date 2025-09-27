@@ -1011,7 +1011,8 @@ def extract_host_info():
                         if lun_be_name != "device_null":
                             lun_fe_name = lun_name_map.get(lun_be_name, lun_be_name)
                             host_luns_initiators[host_name]["luns"].add(lun_fe_name)
-                            host_luns_initiators[host_name]["luns"].remove(lun_be_name)
+                            if lun_be_name != lun_fe_name:
+                                host_luns_initiators[host_name]["luns"].remove(lun_be_name)
 
                     host_luns_initiators[host_name]["initiators"].append(initiator)
                     host_luns_initiators[host_name]["target_map"][initiator] = target_address
@@ -1398,12 +1399,23 @@ def lom_chassis(is_hdd):
     #Here we get U number and FF
     eall_file = os.path.join(script_dir, "SystemOverallInfo", "storcli-Eall-show.mylinux")
     eall_show_file = os.path.join(script_dir, "SystemOverallInfo", "storcli-Eall-show-all.mylinux")
+    
     with open(sysinfo_file, "r") as file:
         for line in file:
             if "CPU2" in line:
                 if "OK" in line:
                     sab_model = "HB"
     with open(eall_file, "r") as file:
+        #Here we check if we have SAB VR
+        for line in file:
+            if "KVM" in line:
+                chassis_lom.append({
+                "Module Name": module,
+                "Description": "HPDS SAB VR",
+                "Part Number": "VR",
+                "Count": 1
+               })
+                return chassis_lom
         plane_cntr = 0
         for line in file:
             if "Port 0 - 3" in line:
@@ -1417,7 +1429,7 @@ def lom_chassis(is_hdd):
                 size = "4U"
                 ff = "36"
             if " 24 " in line and size == "2U":
-                size = "4U"
+                #size = "4U"
                 ff = "24"
     if os.path.exists(eall_show_file):
         with open(eall_show_file, "r") as file:
