@@ -798,6 +798,7 @@ def extract_sysinfo():
     try:
         if pmc_file:
             # Extract versions from pmc output
+            print("System Info extracted from output.txt")
             with open(pmc_file[0], "r") as file:
                 content = file.read()
                 basic_info = {
@@ -884,6 +885,7 @@ def extract_host_info():
     if is_pmc:
         pmc_output = "output.txt"
         current_wwn = None
+        print("output.txt used in extracting host info")
         with open(pmc_output, "r") as file:
             lines = file.readlines()
         # We map port connection to wwn addresses 
@@ -1155,7 +1157,7 @@ def extract_slot_port_info():
     pmc_files = glob.glob(os.path.join(script_dir, "output.txt"))
 
     if pmc_files:
-
+        print("output.txt used in extracting slot info")
         with open(pmc_files[0], "r") as f:
             log = f.read()
 
@@ -1446,7 +1448,7 @@ def lom_chassis(is_hdd):
     #Extracting chassis type from output or log files
     output_file = os.path.join(script_dir, "output.txt")
     if os.path.exists(output_file):
-        print("found output")
+        print("output.txt used in extracting chassis type")
         with open(output_file) as file:
             for line in file:
                 if "SMC" in line:

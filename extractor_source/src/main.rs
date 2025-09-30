@@ -33,11 +33,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let log_path = PathBuf::from(cleanup_log);
     extracted_files.push(log_path);
-    let (tx, rx) = std::sync::mpsc::channel();
 
     let result = wait_for_signal_and_cleanup(extracted_files);
-    tx.send(result).expect("Failed to send cleanup status");
-
+    match result {
+	Err(_) => println!("Failed to cleanup"),
+	_ => println!("cleanup succesfully"),
+    };
 
     Ok(())
 }
