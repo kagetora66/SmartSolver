@@ -628,6 +628,10 @@ def extract_hdd_parameters(log_content):
             })
     return data
 
+def log_extract(log_path):
+    with open(log_path, "r") as file:
+        lines = file.readlines()
+        return lines
 # Function to extract HDD device info (only if both values are found)
 def extract_device_info(log_content, enclosure):
     data = []
@@ -810,7 +814,8 @@ def extract_sysinfo():
                     "CLI Version": re.search(r'CLI Version:\s*([^\s]+)', content),
                     "ROC Temp": re.search(r'ROC temperature.*\(Degree Celsius\)\s*=\s*([^\s]+)', content),
                     "CV Temp": re.search(r'Temperature\s*([^\s]+)', content),
-                    "BBU Status": re.search(r'BBU Status =\s*([^\s]+)', content)
+                    "BBU Status": re.search(r'BBU Status =\s*([^\s]+)', content),
+                    "CC Status": re.search(r'CC is\s*(.+)', content)
                 } 
         #If pmc file does not include desired values
                 if basic_info["UI Version"] == None:
@@ -1553,6 +1558,7 @@ def pool_info():
     storcli_Dall_path = os.path.join(script_dir, "SystemOverallInfo", "storcli-Dall-show-all.mylinux")
     lvm_info_path = os.path.join(script_dir, "SystemOverallInfo", "LVMInfo.mylinux")
     storcli_vall_path = os.path.join(script_dir, "SystemOverallInfo", "storcli-Vall-show.mylinux")
+    storcli_Sall_path = os.path.join(script_dir, "SystemOverallInfo", "storcli-Sall-show.mylinux")
     pattern = r"""
         ^\s*
         (\d+)\s*\/?\s*(\d*)\s+
@@ -1626,7 +1632,6 @@ def pool_info():
                 match = re.match(pattern, line)
                 if match:
                     dg_number = match.group(1)
-                    #drive_size = match.group(2)
                     dg_counts[dg_number] += 1
                     drive_size.append({
                         'dg' : dg_number,
@@ -1757,12 +1762,28 @@ def pool_info():
                 raids['LUN Name-FE'] = result_lun[0] if result_lun else "-"
 
         else:
-            raid['Pool Name-FE'] = None
+            raids['Pool Name-FE'] = None
             print(f"Database not found at {sab_db_file}")
-
-
+    with open(storcli_Sall_path, "r") as file:
+        sall_content = file.read()
+        disk_type_pattern = r'^\S+\s+\d+\s+\S+\s+(\d+)\s+\S+\s+\S+\s+(\S+\s+\S+)'
+        dg_disk = []
+        for line in sall_content.split('\n'):
+           match = re.match(disk_type_pattern, line) 
+           if match:
+               dg = match.group(1)
+               disk_type = match.group(2)
+               dg_disk.append({
+                   'dg': dg,
+                   'Disk Type': disk_type
+               })
+    for raid in raid_merge:
+       for disks in dg_disk:
+           if disks['dg'] == raid['dg']:
+               raid['Disk Type'] = disks['Disk Type']
+               
     # Define the desired field order
-    field_order = ['dg', 'vd', 'RAID Type', 'RAID Status', 'Cache Mode', 'Consist', 'Drive Size', 'Pool Name', 'Pool Name-FE','Pool Size', 'Number of disks', 'Pool Drives', 'Hotspares', 'LUN Name', 'LUN Name-FE', 'LUN Size']
+    field_order = ['dg', 'vd', 'RAID Type', 'RAID Status', 'Cache Mode', 'Consist', 'Drive Size', 'Disk Type', 'Pool Name', 'Pool Name-FE','Pool Size', 'Number of disks', 'Pool Drives', 'Hotspares', 'LUN Name', 'LUN Name-FE', 'LUN Size']
     # Create new sorted dictionaries
     sorted_pool_data = []
     #Here we ensure to add pools that dont have luns
@@ -2062,8 +2083,14 @@ if __name__ == "__main__":
         extractor()
     # Path to the smarts.mylinux file in the /SystemOverallInfo directory
     smarts_file_path = os.path.join(script_dir, "SystemOverallInfo", "smarts.mylinux")
+    dmesg_path =  os.path.join(script_dir, "Logs", "dmesg")
+    if os.path.isfile(dmesg_path):
+        dmesg = log_extract(dmesg_path)
+    uilog_path =  os.path.join(script_dir, "Logs", "sab-ui.log")
+    if os.path.isfile(uilog_path):
+        uilog = log_extract(uilog_path)
+ 
     target_data = extract_host_info()
-    
     # Path to the storcli-Sall-show-all.mylinux file in the /SystemOverallInfo directory
     storcli_file_path = os.path.join(script_dir, "SystemOverallInfo", "storcli-Sall-show-all.mylinux")
     #Setting the output name
@@ -2186,6 +2213,12 @@ if __name__ == "__main__":
             df_host.to_excel(writer, sheet_name="General System Info", index=False)
         if slot_info:
             write_slot_info_sheet(writer, slot_info)
+        if dmesg:
+            df_dmesg = pd.DataFrame(dmesg)
+            df_dmesg.to_excel(writer, sheet_name="dmesg log", index=False)
+        if uilog:
+            df_uilog = pd.DataFrame(uilog)
+            df_uilog.to_excel(writer, sheet_name="sab-ui log", index=False)
         if ssd_lom or hdd_lom or lom_cards_final or chassis_lom:
             dfs = []
             if chassis_lom:
@@ -2340,6 +2373,28 @@ if __name__ == "__main__":
                     cell.fill = orange_fill
                 if cell.value == "SAN Switch(system_status)" or cell.value == "Point to Point(system_status)":
                     cell.fill = yellow_fill
+    if "dmesg log" in wb.sheetnames:
+        ws = wb["dmesg log"]
+        for row in ws.iter_rows(min_row=1):
+            for cell in row:
+                if cell.value and "Error" in str(cell.value) or "Failure" in str(cell.value):
+                    cell.fill = red_fill
+                if cell.value and "Loop Down" in str(cell.value) or "Warning" in str(cell.value) or "Emergency" in str(cell.value) :
+                    cell.fill = yellow_fill
+                if cell.value and "Fatal" in str(cell.value):
+                    cell.fill = brown_fill
+    if "sab-ui log" in wb.sheetnames:
+        ws = wb["sab-ui log"]
+        for row in ws.iter_rows(min_row=1):
+            for cell in row:
+                if cell.value and "Error" in str(cell.value) or "Failed" in str(cell.value):
+                    cell.fill = red_fill
+                if cell.value and "Timeout" in str(cell.value) or "Warning" in str(cell.value):
+                    cell.fill = yellow_fill
+                if cell.value and "Traceback" in str(cell.value):
+                    cell.fill = brown_fill
+ 
+                    
     # Function to merge cells for a specific column
     deep_blue_fill = PatternFill(start_color="b8cbdf", end_color="b8cbdf", fill_type="solid")
     # Format all sheets except "Device Info"
