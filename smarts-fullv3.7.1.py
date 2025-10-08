@@ -1,5 +1,6 @@
 #By HPDS Tech Support
 #===========ooOoo============
+from contextlib import aclosing
 from datetime import datetime
 import json
 import re
@@ -631,7 +632,9 @@ def extract_hdd_parameters(log_content):
 def log_extract(log_path):
     with open(log_path, "r") as file:
         lines = file.readlines()
-        return lines
+        recent_lines = lines[-1000:]
+        return {"Log": recent_lines} 
+        #return lines[-1000:]
 # Function to extract HDD device info (only if both values are found)
 def extract_device_info(log_content, enclosure):
     data = []
@@ -2062,7 +2065,7 @@ def adjust_column_widths(ws):
         if max_length < 70:
             ws.column_dimensions[col_letter].width = max_length + 4
         else:
-            ws.column_dimensions[col_letter].width = 50
+            ws.column_dimensions[col_letter].width = 70
             for column in ws.iter_cols():
                 for cell in column:
                     cell.alignment = Alignment(wrap_text=True, vertical='center')
@@ -2213,12 +2216,6 @@ if __name__ == "__main__":
             df_host.to_excel(writer, sheet_name="General System Info", index=False)
         if slot_info:
             write_slot_info_sheet(writer, slot_info)
-        if dmesg:
-            df_dmesg = pd.DataFrame(dmesg)
-            df_dmesg.to_excel(writer, sheet_name="dmesg log", index=False)
-        if uilog:
-            df_uilog = pd.DataFrame(uilog)
-            df_uilog.to_excel(writer, sheet_name="sab-ui log", index=False)
         if ssd_lom or hdd_lom or lom_cards_final or chassis_lom:
             dfs = []
             if chassis_lom:
@@ -2234,6 +2231,12 @@ if __name__ == "__main__":
         if chassischart:
             dfs_chart = pd.DataFrame(chassischart)
             dfs_chart.to_excel(writer, sheet_name="Chassis Scheme", index=False)
+        if dmesg:
+            df_dmesg = pd.DataFrame(dmesg)
+            df_dmesg.to_excel(writer, sheet_name="dmesg log", index=False)
+        if uilog:
+            df_uilog = pd.DataFrame(uilog)
+            df_uilog.to_excel(writer, sheet_name="sab-ui log", index=False)
         if about:
             df_about = pd.DataFrame(about)
             df_about.to_excel(writer, sheet_name="About", index=False)
@@ -2375,24 +2378,34 @@ if __name__ == "__main__":
                     cell.fill = yellow_fill
     if "dmesg log" in wb.sheetnames:
         ws = wb["dmesg log"]
+        red_keywords = {"error", "failure", "unexpected", "unstable"}
+        yellow_keywords = {"loop down", "warning", "emergency"}
+        brown_keywords = {"fatal"}
         for row in ws.iter_rows(min_row=1):
             for cell in row:
-                if cell.value and "Error" in str(cell.value) or "Failure" in str(cell.value):
-                    cell.fill = red_fill
-                if cell.value and "Loop Down" in str(cell.value) or "Warning" in str(cell.value) or "Emergency" in str(cell.value) :
-                    cell.fill = yellow_fill
-                if cell.value and "Fatal" in str(cell.value):
-                    cell.fill = brown_fill
+                if cell.value:
+                    text = str(cell.value).lower()
+                    if any(keyword in text for keyword in red_keywords):
+                        cell.fill = red_fill
+                    elif any(keyword in text for keyword in yellow_keywords):
+                        cell.fill = yellow_fill
+                    elif any(keyword in text for keyword in brown_keywords):
+                        cell.fill = brown_fill 
     if "sab-ui log" in wb.sheetnames:
         ws = wb["sab-ui log"]
+        red_keywords = {"error", "failure", "failed"}
+        yellow_keywords = {"timeout", "warning", "traceback", "unplugged"}
+        brown_keywords = {"nonetype"}
         for row in ws.iter_rows(min_row=1):
             for cell in row:
-                if cell.value and "Error" in str(cell.value) or "Failed" in str(cell.value):
-                    cell.fill = red_fill
-                if cell.value and "Timeout" in str(cell.value) or "Warning" in str(cell.value):
-                    cell.fill = yellow_fill
-                if cell.value and "Traceback" in str(cell.value):
-                    cell.fill = brown_fill
+                if cell.value:
+                    text = str(cell.value).lower()
+                    if any(keyword in text for keyword in red_keywords):
+                        cell.fill = red_fill
+                    elif any(keyword in text for keyword in yellow_keywords):
+                        cell.fill = yellow_fill
+                    elif any(keyword in text for keyword in brown_keywords):
+                        cell.fill = brown_fill 
  
                     
     # Function to merge cells for a specific column
@@ -2404,7 +2417,7 @@ if __name__ == "__main__":
         if sheet_name != "Slot Info":
             for cell in ws[1]:# First row
                 cell.fill = deep_blue_fill
-        if sheet_name not in ("Device Info", "Slot Info", "LOM", "Pool Data"):# Skip merging for "Device Info" sheet
+        if sheet_name not in ("Device Info", "Slot Info", "LOM", "Pool Data"):# Skip merging for these sheets
             for column in range(1,7):
                 merge_cells_for_column(ws, column)
             for column in range(11,16):
@@ -2416,6 +2429,9 @@ if __name__ == "__main__":
             #    for cell in row:
             #        cell.alignment = Alignment(wrap_text=True, vertical='center')
         adjust_column_widths(ws) # Adjust column widths for all sheets
+        for cell in ws[1]:
+            cell.alignment = Alignment(wrap_text= True, horizontal='center')
+             
     
     if "Host Info" in wb.sheetnames: 
         host_info_sheet = wb["Host Info"]
