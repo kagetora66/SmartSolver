@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result = wait_for_signal_and_cleanup(extracted_files);
     match result {
 	Err(_) => println!("Failed to cleanup"),
-	_ => println!("cleanup succesfully"),
+	_ => println!("cleanedup succesfully"),
     };
 
     Ok(())

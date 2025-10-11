@@ -663,6 +663,10 @@ def extract_device_info(log_content, enclosure):
                  temperature = "-"
 
              for enc in enclosure:
+                 if not enc.get("En/Slot"):
+                     enc["En/Slot"] = "N/A"
+                 if not enc.get("Disk State"):
+                     enc["Disk State"] = "N/A"
                  if serial_number == enc["Serial Number"]:
                      slot = enc["En/Slot"]
                      interface = enc["Interface"]
@@ -1421,7 +1425,8 @@ def lom_chassis(is_hdd):
     #Here we get U number and FF
     eall_file = os.path.join(script_dir, "SystemOverallInfo", "storcli-Eall-show.mylinux")
     eall_show_file = os.path.join(script_dir, "SystemOverallInfo", "storcli-Eall-show-all.mylinux")
-    
+    if not os.path.isfile(eall_file):
+        return []
     with open(sysinfo_file, "r") as file:
         for line in file:
             if "CPU2" in line:
@@ -1572,9 +1577,10 @@ def pool_info():
         (\S+)\s*-\s*                
         (?:ON|OFF)?\s*
         ([\d.,]+\s*[TGM]B)
-        \s+(\S.*?)
         \s*$
     """
+    if not os.path.isfile(storcli_vall_path):
+        return []
     #We need to check whether vall show is in json format
     if is_valid_json_file(storcli_vall_path):
         with open(storcli_vall_path, "r") as file:
@@ -2106,12 +2112,15 @@ if __name__ == "__main__":
     try:
         with open(smarts_file_path, "r") as file:
             smarts_content = file.read()
-        with open(storcli_file_path, "r") as file:
-            storcli_content = file.read()
     except FileNotFoundError:
         print(f"Error: The required files were not found in the /SystemOverallInfo directory.")
         exit(1)
-    
+    if not os.path.isfile(storcli_file_path):
+        storcli_content = []
+    else:
+        with open(storcli_file_path, "r") as file:
+            storcli_content = file.read()
+        
     # Extract SSD, HDD, and device info data
     ssd_data = extract_ssd_parameters(smarts_content)
     # Check if OS disks are present
@@ -2133,24 +2142,27 @@ if __name__ == "__main__":
     sys_info = extract_sysinfo()
     # Extract enclosure/slot information
     serial_numbers = set([disk["Serial Number"] for disk in ssd_data + hdd_data if disk["Serial Number"] != "Unknown"])
-    enclosure_slot_data = extract_enclosure_slot_info(storcli_content, serial_numbers)
+    if storcli_content != []:
+        enclosure_slot_data = extract_enclosure_slot_info(storcli_content, serial_numbers)
     #lom for cards
     lom_cards_results = lom_cards()
     if lom_cards_results:
        lom_cards_fixed = merge_duplicate_dicts(lom_cards_results)
        lom_cards_final = lom_card_parcer(lom_cards_fixed)
     # Add enclosure/slot information to SSD and HDD data
-    for disk in ssd_data + hdd_data:
-        if disk["Serial Number"] in enclosure_slot_data:
-            disk["Disk State"] = enclosure_slot_data[disk["Serial Number"]]["Disk State"]
-            disk["Media Err"] = enclosure_slot_data[disk["Serial Number"]]["media_error_count"]
-            disk["Other Err"] = enclosure_slot_data[disk["Serial Number"]]["other_error_count"]        
-            disk["Shield Cnt"] = enclosure_slot_data[disk["Serial Number"]]["shield_counter"]
-            disk["Predictive Failure"] = enclosure_slot_data[disk["Serial Number"]]["predictive_failure_count"]
-            disk["En/Slot"] = enclosure_slot_data[disk["Serial Number"]]["enclosure_slot"]
     
-        else:
-            disk["En/Slot"] = ""
+    if storcli_content != []:
+        for disk in ssd_data + hdd_data:
+            if disk["Serial Number"] in enclosure_slot_data:
+                disk["Disk State"] = enclosure_slot_data[disk["Serial Number"]]["Disk State"]
+                disk["Media Err"] = enclosure_slot_data[disk["Serial Number"]]["media_error_count"]
+                disk["Other Err"] = enclosure_slot_data[disk["Serial Number"]]["other_error_count"]        
+                disk["Shield Cnt"] = enclosure_slot_data[disk["Serial Number"]]["shield_counter"]
+                disk["Predictive Failure"] = enclosure_slot_data[disk["Serial Number"]]["predictive_failure_count"]
+                disk["En/Slot"] = enclosure_slot_data[disk["Serial Number"]]["enclosure_slot"]
+    
+            else:
+                disk["En/Slot"] = ""
     is_os = any("250 GB" in str(value) for d in ssd_data for value in d.values())
     #OS Disk not found therefore we extract from pmc output
     if not is_os:
@@ -2251,88 +2263,112 @@ if __name__ == "__main__":
     brown_fill = PatternFill(start_color="8d281e", end_color="FFFF00", fill_type="solid")
     
     #Colour cells based on thresholds
-    if "SMART Data" in wb.sheetnames:
-        ws = wb["SMART Data"]
-        for row in ws.iter_rows(min_row=2):  # Skip header row (row 1)
-            # Extract relevant cells
-            threshold_cell = row[7]  # Column H (Threshold)
-            value_cell = row[8]      # Column I (Value)
-            raw_value_cell = row[9]  # Column J (Raw Value)
-            param_value_cell = row[6]
-            other_error_cell = row[12]
-            shield_cnt_cell = row[13]
-            predict_fail_cell = row[14]
+if "SMART Data" in wb.sheetnames:
+    ws = wb["SMART Data"]
     
-            param_str = param_value_cell.value
-            threshold_str = threshold_cell.value
-            value_str = value_cell.value
-            raw_value_str = raw_value_cell.value
-            other_error_str = other_error_cell.internal_value
-            shield_cnt_str = shield_cnt_cell.internal_value
-            predict_fail_str = predict_fail_cell.internal_value
+    # Define column indices with safe defaults
+    max_cols = ws.max_column
     
-            if other_error_str != None:
-                if other_error_str != '-':
+    # Column indices (0-based for row[x] access)
+    PARAM_COL = 6    # Column G
+    THRESHOLD_COL = 7  # Column H
+    VALUE_COL = 8     # Column I
+    RAW_VALUE_COL = 9  # Column J
+    OTHER_ERROR_COL = 12  # Column M
+    SHIELD_CNT_COL = 13   # Column N
+    PREDICT_FAIL_COL = 14  # Column O
+    
+    for row in ws.iter_rows(min_row=2):  # Skip header row (row 1)
+        # Safely extract cells only if columns exist
+        try:
+            param_value_cell = row[PARAM_COL] if PARAM_COL < len(row) else None
+            threshold_cell = row[THRESHOLD_COL] if THRESHOLD_COL < len(row) else None
+            value_cell = row[VALUE_COL] if VALUE_COL < len(row) else None
+            raw_value_cell = row[RAW_VALUE_COL] if RAW_VALUE_COL < len(row) else None
+            
+            # Optional columns - only process if they exist
+            other_error_cell = row[OTHER_ERROR_COL] if OTHER_ERROR_COL < len(row) else None
+            shield_cnt_cell = row[SHIELD_CNT_COL] if SHIELD_CNT_COL < len(row) else None
+            predict_fail_cell = row[PREDICT_FAIL_COL] if PREDICT_FAIL_COL < len(row) else None
+        except IndexError:
+            continue  # Skip rows that don't have enough columns
+        
+        param_str = param_value_cell.value if param_value_cell else None
+        threshold_str = threshold_cell.value if threshold_cell else None
+        value_str = value_cell.value if value_cell else None
+        raw_value_str = raw_value_cell.value if raw_value_cell else None
+        
+        if other_error_cell:
+            other_error_str = other_error_cell.value
+            if other_error_str not in (None, '-', ''):
+                try:
                     other_error_value = int(other_error_str)
                     if 10 < other_error_value < 35:
                         other_error_cell.fill = yellow_fill
-                    if 36 < other_error_value <70:
+                    elif 36 < other_error_value < 70:
                         other_error_cell.fill = orange_fill
-                    if 70 < other_error_value <100:
+                    elif 70 < other_error_value < 100:
                         other_error_cell.fill = red_fill
-                    if 100 < other_error_value:
+                    elif other_error_value > 100:
                         other_error_cell.fill = brown_fill
-    
-    
-            if shield_cnt_str != None:
-                if shield_cnt_str != '-':
-                    shield_cnt_cell.fill = red_fill
-            if predict_fail_str != None:
-                if predict_fail_str != '-':
-                    predict_fail_cell.fill = red_fill
-    
-            #We dont want to color this cell
-            is_unused_rsvd = False
-            if param_str == "Unused_Rsvd_Blk_Cnt_Tot":
-                is_unused_rsvd = True
-            if threshold_str:
-                threshold_value = float(threshold_str)
-            # Skip rows with missing/invalid thresholds
-            if not threshold_str or threshold_str == "-":
-                continue
-    
-            try:
-                threshold_caution = float(threshold_str) * 1.5
-                threshold_warning = float(threshold_str) * 1.2
-            except (ValueError, TypeError):
-                continue  # Skip non-numeric thresholds
-    
-            # Check Value or Raw Value
-            compare_value = None
-            if value_str not in (None, "-", ""):
-                try:
-                    compare_value = float(value_str)
-                    #To avoid colouring cells when value is 100
-                    if compare_value == 100:
-                        compare_value = 200
-    
                 except (ValueError, TypeError):
-                    pass
-    
-            if compare_value is None:  # Fallback to Raw Value
-                if raw_value_str not in (None, "-", ""):
-                    try:
-                        #because here raw value is smaller than thresold in normal state
-                        threshold_caution = float(threshold_str) * -0.8
-                        threshold_warning = float(threshold_str) * -0.9
-                        compare_value = float(raw_value_str) * -1
-                        threshold_value = threshold_value * -1
-                       # print(threshold_warning)
-                    except (ValueError, TypeError):
-                        continue  # Skip invalid values
-                else:
-                    continue
-    
+                    pass  # Silently handle conversion errors
+        
+        if shield_cnt_cell:
+            shield_cnt_str = shield_cnt_cell.value
+            if shield_cnt_str not in (None, '-', ''):
+                shield_cnt_cell.fill = red_fill
+        
+        if predict_fail_cell:
+            predict_fail_str = predict_fail_cell.value
+            if predict_fail_str not in (None, '-', ''):
+                predict_fail_cell.fill = red_fill
+        
+        if not all([param_value_cell, threshold_cell, value_cell, raw_value_cell]):
+            continue
+            
+        # We don't want to color this cell
+        is_unused_rsvd = False
+        if param_str == "Unused_Rsvd_Blk_Cnt_Tot":
+            is_unused_rsvd = True
+            
+        # Skip rows with missing/invalid thresholds
+        if not threshold_str or threshold_str == "-":
+            continue
+
+        try:
+            threshold_value = float(threshold_str)
+            threshold_caution = threshold_value * 1.5
+            threshold_warning = threshold_value * 1.2
+        except (ValueError, TypeError):
+            continue  # Skip non-numeric thresholds
+
+        # Check Value or Raw Value
+        compare_value = None
+        if value_str not in (None, "-", ""):
+            try:
+                compare_value = float(value_str)
+                # To avoid colouring cells when value is 100
+                if compare_value == 100:
+                    compare_value = 200
+            except (ValueError, TypeError):
+                pass
+
+        if compare_value is None:  # Fallback to Raw Value
+            if raw_value_str not in (None, "-", ""):
+                try:
+                    # because here raw value is smaller than threshold in normal state
+                    threshold_caution = threshold_value * -0.8
+                    threshold_warning = threshold_value * -0.9
+                    compare_value = float(raw_value_str) * -1
+                    threshold_value = threshold_value * -1
+                except (ValueError, TypeError):
+                    continue  # Skip invalid values
+            else:
+                continue
+
+        # Only color if we have the raw_value_cell and it's not unused_rsvd
+        if raw_value_cell and not is_unused_rsvd:
             # Highlight if value < threshold
             if compare_value <= threshold_value:
                 raw_value_cell.fill = red_fill
@@ -2340,8 +2376,10 @@ if __name__ == "__main__":
                 raw_value_cell.fill = orange_fill
             elif compare_value <= threshold_caution:
                 raw_value_cell.fill = yellow_fill
-            if is_unused_rsvd:
-                raw_value_cell.fill = PatternFill()
+        
+        # Clear fill for unused_rsvd
+        if is_unused_rsvd and raw_value_cell:
+            raw_value_cell.fill = PatternFill()
     #Coloring the chassis sheet
     if "Chassis Scheme" in wb.sheetnames:
     
@@ -2444,4 +2482,3 @@ if __name__ == "__main__":
     wb.save(excel_path)
     print("SMART data, device info, and host info extracted and written to the Excel file with proper formatting.")
     Path("python_done.flag").touch()
-    
