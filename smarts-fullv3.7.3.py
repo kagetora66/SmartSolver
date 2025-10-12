@@ -634,7 +634,6 @@ def log_extract(log_path):
         lines = file.readlines()
         recent_lines = lines[-1000:]
         return {"Log": recent_lines} 
-        #return lines[-1000:]
 # Function to extract HDD device info (only if both values are found)
 def extract_device_info(log_content, enclosure):
     data = []
@@ -664,9 +663,9 @@ def extract_device_info(log_content, enclosure):
 
              for enc in enclosure:
                  if not enc.get("En/Slot"):
-                     enc["En/Slot"] = "N/A"
+                     enc["En/Slot"] = ""
                  if not enc.get("Disk State"):
-                     enc["Disk State"] = "N/A"
+                     enc["Disk State"] = ""
                  if serial_number == enc["Serial Number"]:
                      slot = enc["En/Slot"]
                      interface = enc["Interface"]
@@ -1519,7 +1518,7 @@ def chassis_chart():
                 {
                     'encID': int(enc_id),
                     'Position': "Front" if values[0] == "Port 0 - 3" else "Back",
-                    'Chassis Type': "DPE" if values[1] == "1" else "DAE1" if values[1] == "2" else "DAE2" if values[1] == "3" else "DPE",
+                    'Chassis Type': "DPE" if str(values[1]) == "1" else "DAE1" if str(values[1]) == "2" else "DAE2" if str(values[1]) == "3" else "DPE",
                     'sort_key': int(values[1])  # Keep original for sorting
                 }
                 for enc_id, values in enclosures.items()
@@ -2075,6 +2074,11 @@ def adjust_column_widths(ws):
             for column in ws.iter_cols():
                 for cell in column:
                     cell.alignment = Alignment(wrap_text=True, vertical='center')
+            
+def adjust_height(ws):
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            ws.row_dimensions[cell.row].height = 80
 def about_info():
     about = []
     script_ver = os.path.basename(__file__)
@@ -2182,10 +2186,6 @@ if __name__ == "__main__":
     
     ssd_data = reorder_columns(ssd_data)
     hdd_data = reorder_columns(hdd_data)
-    
-    # Remove rows where "Enclosure/Slot" is "N/A"
-    ssd_data = [disk for disk in ssd_data]
-    hdd_data = [disk for disk in hdd_data]
     #Create output name
     output = output_name(ID, jalalidate)
     # Create an Excel writer
@@ -2419,6 +2419,7 @@ if "SMART Data" in wb.sheetnames:
         red_keywords = {"error", "failure", "unexpected", "unstable"}
         yellow_keywords = {"loop down", "warning", "emergency"}
         brown_keywords = {"fatal"}
+        adjust_height(ws)
         for row in ws.iter_rows(min_row=1):
             for cell in row:
                 if cell.value:
@@ -2434,6 +2435,7 @@ if "SMART Data" in wb.sheetnames:
         red_keywords = {"error", "failure", "failed"}
         yellow_keywords = {"timeout", "warning", "traceback", "unplugged"}
         brown_keywords = {"nonetype"}
+        adjust_height(ws)
         for row in ws.iter_rows(min_row=1):
             for cell in row:
                 if cell.value:
@@ -2460,16 +2462,23 @@ if "SMART Data" in wb.sheetnames:
                 merge_cells_for_column(ws, column)
             for column in range(11,16):
                 merge_cells_for_column(ws, column)
+        adjust_column_widths(ws) # Adjust column widths for all sheets
         if sheet_name == "Pool Data":
             for column in range(1, 13):
                 merge_cells_for_column(ws, column)
-            #for row in ws.iter_rows():
-            #    for cell in row:
-            #        cell.alignment = Alignment(wrap_text=True, vertical='center')
-        adjust_column_widths(ws) # Adjust column widths for all sheets
+                # Get the column letter
+                col_letter = get_column_letter(column)
+        
+                # Apply alignment to all cells in this column
+                for cell in ws[col_letter]:
+                    cell.alignment = Alignment(wrap_text=True, horizontal='center', vertical='center')
         for cell in ws[1]:
             cell.alignment = Alignment(wrap_text= True, horizontal='center')
-             
+        if sheet_name == "sab-ui log":
+            ws.column_dimensions["A"].width = 180
+        if sheet_name == "dmesg log":
+            ws.column_dimensions["A"].width = 180
+               
     
     if "Host Info" in wb.sheetnames: 
         host_info_sheet = wb["Host Info"]
@@ -2481,4 +2490,3 @@ if "SMART Data" in wb.sheetnames:
         merge_cells_for_column(lom_sheet, 1) #Merge first column (Module Name)
     wb.save(excel_path)
     print("SMART data, device info, and host info extracted and written to the Excel file with proper formatting.")
-    Path("python_done.flag").touch()
