@@ -845,7 +845,7 @@ def extract_sysinfo():
                     "Replication Version": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
                     "Rapidtier Version": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
                     "UI Version": re.search(r'version\s*=\s*"([^"]+)"', content),
-                    "CLI Version": re.search(r'CLI Version:\s*(.+)', content),
+                    "CLI Version": re.search(r'CLI Version:\s*([\d.]+)', content),
                     "ROC Temp": re.search(r'ROC temperature.*\(Degree Celsius\)\s*=\s*([^\s]+)', content),
                     "CV Temp": re.search(r'Temperature\s*([^\s]+)', content),
                     "BBU Status": re.search(r'BBU Status =\s*([^\s]+)', content),
@@ -2521,8 +2521,8 @@ if __name__ == "__main__":
                         raidstate_cell.fill  = red_fill
                     if consist_cell.value == "No":
                         consist_cell.fill = yellow_fill
-            if "System Info" in wb.sheetnames:
-                ws = wb["System Info"]
+            if "General System Info" in wb.sheetnames:
+                ws = wb["General System Info"]
                 cc_col = ""
                 for row in ws.iter_rows():
                     for cell in row:
