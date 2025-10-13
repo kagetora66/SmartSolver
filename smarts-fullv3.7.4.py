@@ -143,6 +143,7 @@ def extract_ssd_parameters(log_content):
         is_sas_ssd = re.search(r"Transport protocol:\s+SAS", block, re.IGNORECASE)
         is_micron_ssd = re.search(r"Device Model:\s+Micron", block, re.IGNORECASE)
         disk_type = ""
+        tb_value = ""
         capacity_match = re.search(r"\[([^\]]+)\]", block)
         if capacity_match:
             tb_value = capacity_match.group(1)
@@ -630,10 +631,34 @@ def extract_hdd_parameters(log_content):
     return data
 
 def log_extract(log_path):
-    with open(log_path, "r") as file:
+  with open(log_path, "r") as file:
         lines = file.readlines()
         recent_lines = lines[-1000:]
-        return {"Log": recent_lines} 
+        if "dmesg" in log_path:
+            return {"Logs": recent_lines}
+        # Process lines to group multi-line entries
+        processed_logs = []
+        current_entry = []
+        
+        for line in recent_lines:
+            line = line.rstrip()  # Remove trailing whitespace/newline
+            # Check if line starts with a timestamp (format: YYYY-MM-DD HH:MM:SS,mmm)
+            if re.match(r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}', line):
+                # If we have a current entry, save it before starting new one
+                if current_entry:
+                    processed_logs.append(" ".join(current_entry))
+                    current_entry = []
+                current_entry.append(line)
+            else:
+                # Continuation line - add to current entry
+                if current_entry:
+                    current_entry.append(line)
+        
+        # Don't forget the last entry
+        if current_entry:
+            processed_logs.append(" ".join(current_entry))
+        
+        return {"Log": processed_logs}
 # Function to extract HDD device info (only if both values are found)
 def extract_device_info(log_content, enclosure):
     data = []
@@ -655,6 +680,9 @@ def extract_device_info(log_content, enclosure):
          tsw_waf2 = "-"
          tsw_waf4 = "-"
          percent_life = "-"
+         slot = "-"
+         model = "-"
+         state = "-"
          if serial_number:
              if temp_match:
                  temperature = f"{temp_match.group(1)}"
@@ -817,7 +845,7 @@ def extract_sysinfo():
                     "Replication Version": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
                     "Rapidtier Version": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
                     "UI Version": re.search(r'version\s*=\s*"([^"]+)"', content),
-                    "CLI Version": re.search(r'CLI Version:\s*([^\s]+)', content),
+                    "CLI Version": re.search(r'CLI Version:\s*(.+)', content),
                     "ROC Temp": re.search(r'ROC temperature.*\(Degree Celsius\)\s*=\s*([^\s]+)', content),
                     "CV Temp": re.search(r'Temperature\s*([^\s]+)', content),
                     "BBU Status": re.search(r'BBU Status =\s*([^\s]+)', content),
@@ -1432,6 +1460,7 @@ def lom_chassis(is_hdd):
                 if "OK" in line:
                     sab_model = "HB"
     with open(eall_file, "r") as file:
+        plane_cntr = 0
         #Here we check if we have SAB VR
         for line in file:
             if "KVM" in line:
@@ -1442,8 +1471,6 @@ def lom_chassis(is_hdd):
                 "Count": 1
                })
                 return chassis_lom
-        plane_cntr = 0
-        for line in file:
             if "Port 0 - 3" in line:
                 #we detect the number of chassis by counting front planes
                 plane_cntr += 1
@@ -1480,7 +1507,8 @@ def lom_chassis(is_hdd):
         sab_model = "DT"
     elif is_allflash:
         sab_model = "AF"
-    if plane_cntr >2:
+    expander =0
+    if plane_cntr >1:
         expander = 1
     for part in partnums_chassis:
         if part["Type"] == chassis_type and part["FF"] == ff and part["Size"] == size and sab_model in part["Description"]:
@@ -1579,6 +1607,7 @@ def pool_info():
         \s*$
     """
     if not os.path.isfile(storcli_vall_path):
+        print("Vall-show file not found")
         return []
     #We need to check whether vall show is in json format
     if is_valid_json_file(storcli_vall_path):
@@ -1713,6 +1742,7 @@ def pool_info():
             if raid["Pool Drives"] == '':
                 raid["Pool Drives"] = "-"
     #Adding information for luns of each pool. Names plus size. (for now we merge the lun name and size with this format )
+    disk_blocks = []
     with open(lvm_info_path, "r") as file:
          # Split the log into blocks for each disk.
         content = file.read()
@@ -2097,6 +2127,8 @@ if __name__ == "__main__":
     # Path to the smarts.mylinux file in the /SystemOverallInfo directory
     smarts_file_path = os.path.join(script_dir, "SystemOverallInfo", "smarts.mylinux")
     dmesg_path =  os.path.join(script_dir, "Logs", "dmesg")
+    dmesg = ""
+    uilog = ""
     if os.path.isfile(dmesg_path):
         dmesg = log_extract(dmesg_path)
     uilog_path =  os.path.join(script_dir, "Logs", "sab-ui.log")
@@ -2146,10 +2178,12 @@ if __name__ == "__main__":
     sys_info = extract_sysinfo()
     # Extract enclosure/slot information
     serial_numbers = set([disk["Serial Number"] for disk in ssd_data + hdd_data if disk["Serial Number"] != "Unknown"])
+    enclosure_slot_data = []
     if storcli_content != []:
         enclosure_slot_data = extract_enclosure_slot_info(storcli_content, serial_numbers)
     #lom for cards
     lom_cards_results = lom_cards()
+    lom_cards_final = ""
     if lom_cards_results:
        lom_cards_fixed = merge_duplicate_dicts(lom_cards_results)
        lom_cards_final = lom_card_parcer(lom_cards_fixed)
@@ -2211,7 +2245,6 @@ if __name__ == "__main__":
             df_device.to_excel(writer, sheet_name="Device Info", index=False)
         if pool_data:
             df_host = pd.DataFrame(pool_data)
-#            df_host['LUN Name'] = df_host['LUN Name'].astype('string')
             if not df_host['LUN Name'].eq("-").all():
                 df_host['LUN Name'] = df_host['LUN Name'].astype('string')
                 unique_df = df_host.drop_duplicates(subset = ["LUN Name"])
@@ -2254,239 +2287,295 @@ if __name__ == "__main__":
             df_about.to_excel(writer, sheet_name="About", index=False)
     
     # Open the Excel file and format it
-    wb = load_workbook(excel_path)
-    yellow_fill = PatternFill(start_color="ffffa6", end_color="FFFF00", fill_type="solid")
-    orange_fill = PatternFill(start_color="FFA500", end_color="FFFF00", fill_type="solid")
-    red_fill = PatternFill(start_color="de0a0a", end_color="FFFF00", fill_type="solid")
-    green_fill = PatternFill(start_color="bbe33d", end_color="FFFF00", fill_type="solid")
-    grey_fill = PatternFill(start_color="cccccc", end_color="FFFF00", fill_type="solid")
-    brown_fill = PatternFill(start_color="8d281e", end_color="FFFF00", fill_type="solid")
-    
-    #Colour cells based on thresholds
-if "SMART Data" in wb.sheetnames:
-    ws = wb["SMART Data"]
-    
-    # Define column indices with safe defaults
-    max_cols = ws.max_column
-    
-    # Column indices (0-based for row[x] access)
-    PARAM_COL = 6    # Column G
-    THRESHOLD_COL = 7  # Column H
-    VALUE_COL = 8     # Column I
-    RAW_VALUE_COL = 9  # Column J
-    OTHER_ERROR_COL = 12  # Column M
-    SHIELD_CNT_COL = 13   # Column N
-    PREDICT_FAIL_COL = 14  # Column O
-    
-    for row in ws.iter_rows(min_row=2):  # Skip header row (row 1)
-        # Safely extract cells only if columns exist
-        try:
-            param_value_cell = row[PARAM_COL] if PARAM_COL < len(row) else None
-            threshold_cell = row[THRESHOLD_COL] if THRESHOLD_COL < len(row) else None
-            value_cell = row[VALUE_COL] if VALUE_COL < len(row) else None
-            raw_value_cell = row[RAW_VALUE_COL] if RAW_VALUE_COL < len(row) else None
-            
-            # Optional columns - only process if they exist
-            other_error_cell = row[OTHER_ERROR_COL] if OTHER_ERROR_COL < len(row) else None
-            shield_cnt_cell = row[SHIELD_CNT_COL] if SHIELD_CNT_COL < len(row) else None
-            predict_fail_cell = row[PREDICT_FAIL_COL] if PREDICT_FAIL_COL < len(row) else None
-        except IndexError:
-            continue  # Skip rows that don't have enough columns
-        
-        param_str = param_value_cell.value if param_value_cell else None
-        threshold_str = threshold_cell.value if threshold_cell else None
-        value_str = value_cell.value if value_cell else None
-        raw_value_str = raw_value_cell.value if raw_value_cell else None
-        
-        if other_error_cell:
-            other_error_str = other_error_cell.value
-            if other_error_str not in (None, '-', ''):
+    try:
+        wb = load_workbook(excel_path)
+        yellow_fill = PatternFill(start_color="ffffa6", end_color="FFFF00", fill_type="solid")
+        orange_fill = PatternFill(start_color="FFA500", end_color="FFFF00", fill_type="solid")
+        red_fill = PatternFill(start_color="de0a0a", end_color="FFFF00", fill_type="solid")
+        green_fill = PatternFill(start_color="bbe33d", end_color="FFFF00", fill_type="solid")
+        grey_fill = PatternFill(start_color="cccccc", end_color="FFFF00", fill_type="solid")
+        brown_fill = PatternFill(start_color="8d281e", end_color="FFFF00", fill_type="solid")
+
+            #Colour cells based on thresholds
+        if "SMART Data" in wb.sheetnames:
+            ws = wb["SMART Data"]
+
+            # Define column indices with safe defaults
+            max_cols = ws.max_column
+
+            # Column indices (0-based for row[x] access)
+            PARAM_COL = 6    # Column G
+            THRESHOLD_COL = 7  # Column H
+            VALUE_COL = 8     # Column I
+            RAW_VALUE_COL = 9  # Column J
+            OTHER_ERROR_COL = 12  # Column M
+            SHIELD_CNT_COL = 13   # Column N
+            PREDICT_FAIL_COL = 14  # Column O
+
+            for row in ws.iter_rows(min_row=2):  # Skip header row (row 1)
+                # Safely extract cells only if columns exist
                 try:
-                    other_error_value = int(other_error_str)
-                    if 10 < other_error_value < 35:
-                        other_error_cell.fill = yellow_fill
-                    elif 36 < other_error_value < 70:
-                        other_error_cell.fill = orange_fill
-                    elif 70 < other_error_value < 100:
-                        other_error_cell.fill = red_fill
-                    elif other_error_value > 100:
-                        other_error_cell.fill = brown_fill
-                except (ValueError, TypeError):
-                    pass  # Silently handle conversion errors
-        
-        if shield_cnt_cell:
-            shield_cnt_str = shield_cnt_cell.value
-            if shield_cnt_str not in (None, '-', ''):
-                shield_cnt_cell.fill = red_fill
-        
-        if predict_fail_cell:
-            predict_fail_str = predict_fail_cell.value
-            if predict_fail_str not in (None, '-', ''):
-                predict_fail_cell.fill = red_fill
-        
-        if not all([param_value_cell, threshold_cell, value_cell, raw_value_cell]):
-            continue
-            
-        # We don't want to color this cell
-        is_unused_rsvd = False
-        if param_str == "Unused_Rsvd_Blk_Cnt_Tot":
-            is_unused_rsvd = True
-            
-        # Skip rows with missing/invalid thresholds
-        if not threshold_str or threshold_str == "-":
-            continue
+                    param_value_cell = row[PARAM_COL] if PARAM_COL < len(row) else None
+                    threshold_cell = row[THRESHOLD_COL] if THRESHOLD_COL < len(row) else None
+                    value_cell = row[VALUE_COL] if VALUE_COL < len(row) else None
+                    raw_value_cell = row[RAW_VALUE_COL] if RAW_VALUE_COL < len(row) else None
 
-        try:
-            threshold_value = float(threshold_str)
-            threshold_caution = threshold_value * 1.5
-            threshold_warning = threshold_value * 1.2
-        except (ValueError, TypeError):
-            continue  # Skip non-numeric thresholds
+                    # Optional columns - only process if they exist
+                    other_error_cell = row[OTHER_ERROR_COL] if OTHER_ERROR_COL < len(row) else None
+                    shield_cnt_cell = row[SHIELD_CNT_COL] if SHIELD_CNT_COL < len(row) else None
+                    predict_fail_cell = row[PREDICT_FAIL_COL] if PREDICT_FAIL_COL < len(row) else None
+                except IndexError:
+                    continue  # Skip rows that don't have enough columns
 
-        # Check Value or Raw Value
-        compare_value = None
-        if value_str not in (None, "-", ""):
-            try:
-                compare_value = float(value_str)
-                # To avoid colouring cells when value is 100
-                if compare_value == 100:
-                    compare_value = 200
-            except (ValueError, TypeError):
-                pass
+                param_str = param_value_cell.value if param_value_cell else None
+                threshold_str = threshold_cell.value if threshold_cell else None
+                value_str = value_cell.value if value_cell else None
+                raw_value_str = raw_value_cell.value if raw_value_cell else None
 
-        if compare_value is None:  # Fallback to Raw Value
-            if raw_value_str not in (None, "-", ""):
+                if other_error_cell:
+                    other_error_str = other_error_cell.value
+                    if other_error_str not in (None, '-', ''):
+                        try:
+                            other_error_value = int(other_error_str)
+                            if 10 < other_error_value < 35:
+                                other_error_cell.fill = yellow_fill
+                            elif 36 < other_error_value < 70:
+                                other_error_cell.fill = orange_fill
+                            elif 70 < other_error_value < 100:
+                                other_error_cell.fill = red_fill
+                            elif other_error_value > 100:
+                                other_error_cell.fill = brown_fill
+                        except (ValueError, TypeError):
+                            pass  # Silently handle conversion errors
+
+                if shield_cnt_cell:
+                    shield_cnt_str = shield_cnt_cell.value
+                    if shield_cnt_str not in (None, '-', ''):
+                        shield_cnt_cell.fill = red_fill
+
+                if predict_fail_cell:
+                    predict_fail_str = predict_fail_cell.value
+                    if predict_fail_str not in (None, '-', ''):
+                        predict_fail_cell.fill = red_fill
+
+                if not all([param_value_cell, threshold_cell, value_cell, raw_value_cell]):
+                    continue
+
+                # We don't want to color this cell
+                is_unused_rsvd = False
+                if param_str == "Unused_Rsvd_Blk_Cnt_Tot":
+                    is_unused_rsvd = True
+
+                # Skip rows with missing/invalid thresholds
+                if not threshold_str or threshold_str == "-":
+                    continue
+
                 try:
-                    # because here raw value is smaller than threshold in normal state
-                    threshold_caution = threshold_value * -0.8
-                    threshold_warning = threshold_value * -0.9
-                    compare_value = float(raw_value_str) * -1
-                    threshold_value = threshold_value * -1
+                    threshold_value = float(threshold_str)
+                    threshold_caution = threshold_value * 1.5
+                    threshold_warning = threshold_value * 1.2
                 except (ValueError, TypeError):
-                    continue  # Skip invalid values
-            else:
-                continue
+                    continue  # Skip non-numeric thresholds
 
-        # Only color if we have the raw_value_cell and it's not unused_rsvd
-        if raw_value_cell and not is_unused_rsvd:
-            # Highlight if value < threshold
-            if compare_value <= threshold_value:
-                raw_value_cell.fill = red_fill
-            elif compare_value <= threshold_warning:
-                raw_value_cell.fill = orange_fill
-            elif compare_value <= threshold_caution:
-                raw_value_cell.fill = yellow_fill
-        
-        # Clear fill for unused_rsvd
-        if is_unused_rsvd and raw_value_cell:
-            raw_value_cell.fill = PatternFill()
-    #Coloring the chassis sheet
-    if "Chassis Scheme" in wb.sheetnames:
+                # Check Value or Raw Value
+                compare_value = None
+                if value_str not in (None, "-", ""):
+                    try:
+                        compare_value = float(value_str)
+                        # To avoid colouring cells when value is 100
+                        if compare_value == 100:
+                            compare_value = 200
+                    except (ValueError, TypeError):
+                        pass
+
+                if compare_value is None:  # Fallback to Raw Value
+                    if raw_value_str not in (None, "-", ""):
+                        try:
+                            # because here raw value is smaller than threshold in normal state
+                            threshold_caution = threshold_value * -0.8
+                            threshold_warning = threshold_value * -0.9
+                            compare_value = float(raw_value_str) * -1
+                            threshold_value = threshold_value * -1
+                        except (ValueError, TypeError):
+                            continue  # Skip invalid values
+                    else:
+                        continue
+
+                # Only color if we have the raw_value_cell and it's not unused_rsvd
+                if raw_value_cell and not is_unused_rsvd:
+                    # Highlight if value < threshold
+                    if compare_value <= threshold_value:
+                        raw_value_cell.fill = red_fill
+                    elif compare_value <= threshold_warning:
+                        raw_value_cell.fill = orange_fill
+                    elif compare_value <= threshold_caution:
+                        raw_value_cell.fill = yellow_fill
+
+                # Clear fill for unused_rsvd
+                if is_unused_rsvd and raw_value_cell:
+                    raw_value_cell.fill = PatternFill()
+            #Coloring the chassis sheet
+            if "Chassis Scheme" in wb.sheetnames:
+
+                thin_border = Border(
+                    left=Side(style='thin'),
+                    right=Side(style='thin'),
+                    top=Side(style='thin'),
+                    bottom=Side(style='thin')
+                )
+                ws = wb["Chassis Scheme"]
+                for row in ws.iter_rows(min_row=2): # Skip header row (row 1)
+                    chassistype = row[2]
+                    port = row[1]
+                    port_value = port.value
+                    chassistype_value = chassistype.value
+                    if port_value == "Front":
+                        for cell in row:
+                            cell.fill = grey_fill
+                    if chassistype_value == "DPE":
+                        chassistype.fill = green_fill
+                        for cell in row:
+                            cell.border = thin_border
+                    elif chassistype_value == "DAE1" or chassistype_value == "DAE2":
+                        chassistype.fill = yellow_fill
+                        for cell in row:
+                            cell.border = thin_border
+            if "Host Info" in wb.sheetnames:
+                ws = wb["Host Info"]
+                for row in ws.iter_rows(min_row=2):
+                    for cell in row:
+                        if cell.value == "Unknown":
+                            cell.fill = orange_fill
+                        if cell.value == "SAN Switch(system_status)" or cell.value == "Point to Point(system_status)":
+                            cell.fill = yellow_fill
+            if "dmesg log" in wb.sheetnames:
+                ws = wb["dmesg log"]
+                red_keywords = {"error", "failure", "unexpected", "unstable", "failed", "fail"}
+                yellow_keywords = {"loop down", "warning", "time out", "timeout", "abort_task", "task abort", "unplugged"}
+                brown_keywords = {"fatal", "emergency", "crash"}
+                adjust_height(ws)
+                for row in ws.iter_rows(min_row=1):
+                    for cell in row:
+                        if cell.value:
+                            text = str(cell.value).lower()
+                            if any(keyword in text for keyword in red_keywords):
+                                cell.fill = red_fill
+                            elif any(keyword in text for keyword in yellow_keywords):
+                                cell.fill = yellow_fill
+                            elif any(keyword in text for keyword in brown_keywords):
+                                cell.fill = brown_fill 
+            if "sab-ui log" in wb.sheetnames:
+                ws = wb["sab-ui log"]
+                red_keywords = {"error", "failure", "failed", "fail"}
+                yellow_keywords = {"timeout", "warning", "traceback", "unplugged", "time out"}
+                brown_keywords = {"nonetype"}
+                adjust_height(ws)
+                for row in ws.iter_rows(min_row=1):
+                    for cell in row:
+                        if cell.value:
+                            text = str(cell.value).lower()
+                            if any(keyword in text for keyword in red_keywords):
+                                cell.fill = red_fill
+                            elif any(keyword in text for keyword in yellow_keywords):
+                                cell.fill = yellow_fill
+                            elif any(keyword in text for keyword in brown_keywords):
+                                cell.fill = brown_fill 
+            #Coloring temperature column 
+            if "Device Info" in wb.sheetnames:
+                ws = wb["Device Info"]
+                TEMPERATURE_COLUMN = 5
+                PERCENT_LIFE_COL = 11
+                LOW_THRESHOLD_TEMPERATURE = 40
+                HIGH_THRESHOLD_TEMPERATURE = 50
+                HIGH_THRESHOLD_PLIFE = 90
+                LOW_THRESHOLD_PLIFE = 70
+
+                for row in ws.iter_rows(min_row=2):# Skip header row (row 1)
+                    temperature_cell = row[TEMPERATURE_COLUMN]
+                    percent_life_cell = row[PERCENT_LIFE_COL]
+                    if temperature_cell.value != "-":
+                        temperature = int(temperature_cell.value)
+                        if temperature > HIGH_THRESHOLD_TEMPERATURE:
+                            temperature_cell.fill = red_fill
+                        elif temperature > LOW_THRESHOLD_TEMPERATURE:
+                            temperature_cell.fill = yellow_fill
+                    if percent_life_cell.value != "-":
+                        percent_life = int(percent_life_cell.value)
+                        if percent_life > HIGH_THRESHOLD_PLIFE:
+                            percent_life_cell.fill = red_fill
+                        if percent_life > LOW_THRESHOLD_PLIFE:
+                            percent_life_cell.fill = yellow_fill
+
+            if "Pool Data" in wb.sheetnames:
+                ws = wb["Pool Data"]
+                HOTSPARE_COL = 13
+                RAIDSTATE_COL = 3
+                CONSISST_COL = 5
+                for row in ws.iter_rows(min_row=2):# Skip header row (row 1)
+                    hotspare_cell = row[HOTSPARE_COL]
+                    raidstate_cell = row[RAIDSTATE_COL]
+                    consist_cell = row[CONSISST_COL]
+                    if hotspare_cell.value == "-":
+                        hotspare_cell.fill = yellow_fill
+                    if raidstate_cell.value == "Dgrd":
+                        raidstate_cell.fill  = red_fill
+                    if consist_cell.value == "No":
+                        consist_cell.fill = yellow_fill
+            if "System Info" in wb.sheetnames:
+                ws = wb["System Info"]
+                cc_col = ""
+                for row in ws.iter_rows():
+                    for cell in row:
+                        if cell.value == "CC Status":
+                            cc_col = cell.col_idx
+                        if cc_col:
+                            cell_text = str(cell.value)
+                            if "Conc" in cell_text:
+                                cell.fill = yellow_fill
+
+            # Function to merge cells for a specific column
+            deep_blue_fill = PatternFill(start_color="b8cbdf", end_color="b8cbdf", fill_type="solid")
+            # Format all sheets except "Device Info"
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                #Color the first row of sheets
+                if sheet_name != "Slot Info":
+                    for cell in ws[1]:# First row
+                        cell.fill = deep_blue_fill
+                if sheet_name not in ("Device Info", "Slot Info", "LOM", "Pool Data"):# Skip merging for these sheets
+                    for column in range(1,7):
+                        merge_cells_for_column(ws, column)
+                    for column in range(11,16):
+                        merge_cells_for_column(ws, column)
+                adjust_column_widths(ws) # Adjust column widths for all sheets
+                if sheet_name == "Pool Data":
+                    for column in range(1, 15):
+                        merge_cells_for_column(ws, column)
+                        # Get the column letter
+                        col_letter = get_column_letter(column)
+
+                        # Apply alignment to all cells in this column
+                        for cell in ws[col_letter]:
+                            cell.alignment = Alignment(wrap_text=True, horizontal='center', vertical='center')
+                for cell in ws[1]:
+                    cell.alignment = Alignment(wrap_text= True, horizontal='center')
+                if sheet_name == "sab-ui log":
+                    ws.column_dimensions["A"].width = 180
+                if sheet_name == "dmesg log":
+                    ws.column_dimensions["A"].width = 180
+
+
+            if "Host Info" in wb.sheetnames: 
+                host_info_sheet = wb["Host Info"]
+                merge_cells_for_column(host_info_sheet, 4)  # Merge "Initiators" column (column 4)
+                merge_cells_for_column(host_info_sheet, 5)  # Merge "Targets" column (column 5) 
+                merge_cells_for_column(host_info_sheet, 6)  # Merge "Connection type" column (column 6)
+            if "LOM" in wb.sheetnames:
+                lom_sheet = wb["LOM"] #Merge first column (Module Name)]
+                merge_cells_for_column(lom_sheet, 1) #Merge first column (Module Name)
+            wb.save(excel_path)
+            print("SMART data, device info, and host info extracted and written to the Excel file with proper formatting.")
+            Path("python_done.flag").touch()
+    except FileNotFoundError:
+        print("Excel not found")
     
-        thin_border = Border(
-            left=Side(style='thin'),
-            right=Side(style='thin'),
-            top=Side(style='thin'),
-            bottom=Side(style='thin')
-        )
-        ws = wb["Chassis Scheme"]
-        for row in ws.iter_rows(min_row=2): # Skip header row (row 1)
-            chassistype = row[2]
-            port = row[1]
-            port_value = port.value
-            chassistype_value = chassistype.value
-            if port_value == "Front":
-                for cell in row:
-                    cell.fill = grey_fill
-            if chassistype_value == "DPE":
-                chassistype.fill = green_fill
-                for cell in row:
-                    cell.border = thin_border
-            elif chassistype_value == "DAE1" or chassistype_value == "DAE2":
-                chassistype.fill = yellow_fill
-                for cell in row:
-                    cell.border = thin_border
-    if "Host Info" in wb.sheetnames:
-        ws = wb["Host Info"]
-        for row in ws.iter_rows(min_row=2):
-            for cell in row:
-                if cell.value == "Unknown":
-                    cell.fill = orange_fill
-                if cell.value == "SAN Switch(system_status)" or cell.value == "Point to Point(system_status)":
-                    cell.fill = yellow_fill
-    if "dmesg log" in wb.sheetnames:
-        ws = wb["dmesg log"]
-        red_keywords = {"error", "failure", "unexpected", "unstable"}
-        yellow_keywords = {"loop down", "warning", "emergency"}
-        brown_keywords = {"fatal"}
-        adjust_height(ws)
-        for row in ws.iter_rows(min_row=1):
-            for cell in row:
-                if cell.value:
-                    text = str(cell.value).lower()
-                    if any(keyword in text for keyword in red_keywords):
-                        cell.fill = red_fill
-                    elif any(keyword in text for keyword in yellow_keywords):
-                        cell.fill = yellow_fill
-                    elif any(keyword in text for keyword in brown_keywords):
-                        cell.fill = brown_fill 
-    if "sab-ui log" in wb.sheetnames:
-        ws = wb["sab-ui log"]
-        red_keywords = {"error", "failure", "failed"}
-        yellow_keywords = {"timeout", "warning", "traceback", "unplugged"}
-        brown_keywords = {"nonetype"}
-        adjust_height(ws)
-        for row in ws.iter_rows(min_row=1):
-            for cell in row:
-                if cell.value:
-                    text = str(cell.value).lower()
-                    if any(keyword in text for keyword in red_keywords):
-                        cell.fill = red_fill
-                    elif any(keyword in text for keyword in yellow_keywords):
-                        cell.fill = yellow_fill
-                    elif any(keyword in text for keyword in brown_keywords):
-                        cell.fill = brown_fill 
- 
-                    
-    # Function to merge cells for a specific column
-    deep_blue_fill = PatternFill(start_color="b8cbdf", end_color="b8cbdf", fill_type="solid")
-    # Format all sheets except "Device Info"
-    for sheet_name in wb.sheetnames:
-        ws = wb[sheet_name]
-        #Color the first row of sheets
-        if sheet_name != "Slot Info":
-            for cell in ws[1]:# First row
-                cell.fill = deep_blue_fill
-        if sheet_name not in ("Device Info", "Slot Info", "LOM", "Pool Data"):# Skip merging for these sheets
-            for column in range(1,7):
-                merge_cells_for_column(ws, column)
-            for column in range(11,16):
-                merge_cells_for_column(ws, column)
-        adjust_column_widths(ws) # Adjust column widths for all sheets
-        if sheet_name == "Pool Data":
-            for column in range(1, 13):
-                merge_cells_for_column(ws, column)
-                # Get the column letter
-                col_letter = get_column_letter(column)
-        
-                # Apply alignment to all cells in this column
-                for cell in ws[col_letter]:
-                    cell.alignment = Alignment(wrap_text=True, horizontal='center', vertical='center')
-        for cell in ws[1]:
-            cell.alignment = Alignment(wrap_text= True, horizontal='center')
-        if sheet_name == "sab-ui log":
-            ws.column_dimensions["A"].width = 180
-        if sheet_name == "dmesg log":
-            ws.column_dimensions["A"].width = 180
-               
-    
-    if "Host Info" in wb.sheetnames: 
-        host_info_sheet = wb["Host Info"]
-        merge_cells_for_column(host_info_sheet, 4)  # Merge "Initiators" column (column 4)
-        merge_cells_for_column(host_info_sheet, 5)  # Merge "Targets" column (column 5) 
-        merge_cells_for_column(host_info_sheet, 6)  # Merge "Connection type" column (column 6)
-    if "LOM" in wb.sheetnames:
-        lom_sheet = wb["LOM"] #Merge first column (Module Name)]
-        merge_cells_for_column(lom_sheet, 1) #Merge first column (Module Name)
-    wb.save(excel_path)
-    print("SMART data, device info, and host info extracted and written to the Excel file with proper formatting.")
