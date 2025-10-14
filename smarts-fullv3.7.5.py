@@ -631,8 +631,11 @@ def extract_hdd_parameters(log_content):
     return data
 
 def log_extract(log_path):
-  with open(log_path, "r") as file:
-        lines = file.readlines()
+  with open(log_path, "rb") as file:
+        content = file.read()
+        content_clean = content.replace(b'\x00', b'')
+        content_uft8 = content_clean.decode('ascii', errors='ignore')
+        lines = content_uft8.splitlines()
         recent_lines = lines[-1000:]
         if "dmesg" in log_path:
             return {"Logs": recent_lines}
@@ -1595,16 +1598,17 @@ def pool_info():
     storcli_vall_path = os.path.join(script_dir, "SystemOverallInfo", "storcli-Vall-show.mylinux")
     storcli_Sall_path = os.path.join(script_dir, "SystemOverallInfo", "storcli-Sall-show.mylinux")
     pattern = r"""
-        ^\s*
-        (\d+)\s*\/?\s*(\d*)\s+
-        (RAID[0-9]+|RAID[15]0|RAID5|OS)
-        \s+(\S+)
-        \s+(?:\S+\s+)
-        \s+(\S+\s+)
-        (\S+)\s*-\s*                
-        (?:ON|OFF)?\s*
-        ([\d.,]+\s*[TGM]B)
-        \s*$
+    ^\s*
+    (\d+)\s*\/\s*(\d+)\s+       # 0/0, 1/1
+    (RAID[0-9]+|RAID[15]0|RAID5|OS)\s+  # RAID1, RAID5, OS
+    (\S+)\s+                     # Optl
+    (?:\S+)\s+                     # RW
+    (\S+)\s+                     # Yes
+    (\S+)\s*-\s*                 # RWTD - , RWBC -
+    (?:ON|OFF)?\s*               # ON (optional)
+    ([\d.,]+\s*[TGM]B)\s+        # 237.968 GB, 21.830 TB
+    (\S+)\s*                     # OS, Midrp_Glust
+    $
     """
     if not os.path.isfile(storcli_vall_path):
         print("Vall-show file not found")
