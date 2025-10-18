@@ -2150,7 +2150,7 @@ if __name__ == "__main__":
     chassischart = chassis_chart()
     # Read the log files
     try:
-        with open(smarts_file_path, "r") as file:
+        with open(smarts_file_path, "r", encoding="utf-8", errors="ignore") as file:
             smarts_content = file.read()
     except FileNotFoundError:
         print(f"Error: The required files were not found in the /SystemOverallInfo directory.")
@@ -2158,7 +2158,7 @@ if __name__ == "__main__":
     if not os.path.isfile(storcli_file_path):
         storcli_content = []
     else:
-        with open(storcli_file_path, "r") as file:
+        with open(storcli_file_path, "r", encoding="utf-8", errors="ignore") as file:
             storcli_content = file.read()
         
     # Extract SSD, HDD, and device info data

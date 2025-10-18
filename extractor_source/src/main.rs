@@ -6,10 +6,13 @@ use zip::ZipArchive;
 use std::thread;
 use std::time::Duration;
 use std::io::BufRead;
-use std::sync::mpsc;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Extract files
-    let zip_path = find_zip_file()?;
+    let zip_path = if let Ok(path) = find_zip_file() {
+    path
+    } else {
+    select_file().expect("No folder selected")
+    }; 
     let mut extracted_files = loop {
         let password = rpassword::prompt_password("Enter password: ")?;
         match extract_zip(&zip_path, Some(&password)) {
@@ -42,6 +45,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+fn select_file() -> Option<PathBuf> {
+    rfd::FileDialog::new()
+    .set_title("Select a zip file containing full_log")
+    .pick_file()
+}
+
 fn find_zip_file() -> Result<PathBuf, Box<dyn std::error::Error>> {
     for entry in std::fs::read_dir(".")? {
         let entry = entry?;
