@@ -2523,7 +2523,7 @@ if __name__ == "__main__":
                     raidstate_cell = row[RAIDSTATE_COL]
                     consist_cell = row[CONSISST_COL]
                     poolname_cell = row[POOL_NAME_COL]
-                    if hotspare_cell.value == "-" and poolname_cel.value != "OS" or "RAPIDSTORE":
+                    if hotspare_cell.value == "-" and poolname_cell.value != "OS" or "RAPIDSTORE":
                         hotspare_cell.fill = yellow_fill
                     if raidstate_cell.value == "Dgrd":
                         raidstate_cell.fill  = red_fill
