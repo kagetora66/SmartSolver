@@ -833,9 +833,16 @@ def extract_sysinfo():
     sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
     version_file = os.path.join(script_dir, "version")
     pmc_file = glob.glob(os.path.join(script_dir, "output.txt"))
-    cfg_file = os.path.join(script_dir, "SystemOverallInfo", "cfgdsply*")
-    adapt_file = os.path.join(script_dir, "SystemOverallInfo", "Adpallinfo*")
- 
+    cfg_match = glob.glob(os.path.join(script_dir, "SystemOverallInfo", "cfgdsply*.mylinux"))
+    call_match = glob.glob(os.path.join(script_dir, "SystemOverallInfo", "storcli-Call-show.mylinux"))
+    if cfg_match:
+        cfg_file = cfg_match[0]
+    adapt_match = glob.glob(os.path.join(script_dir,"SystemOverallInfo", "Adpallinfo*.mylinux"))
+    if adapt_match:
+        adapt_file = adapt_match[0] 
+    if call_match:
+        call_file = call_match[0]
+    
     sys_info = {}
     voltage_index = 1 #For separting the two power modules
     current_index = 1 #For separating the two power modules
@@ -847,42 +854,48 @@ def extract_sysinfo():
                 content = file.read()
                 basic_info = {
                     "SAB ID": re.search(r'hostname\s*:\s*(.*)$', content, re.IGNORECASE | re.MULTILINE), 
-                    "SAB Version": re.search(r'#SAB version\s+([^\s]+)', content),
-                    "Replication Version": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
-                    "Rapidtier Version": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
-                    "UI Version": re.search(r'version\s*=\s*"([^"]+)"', content),
-                    "CLI Version": re.search(r'CLI Version:\s*([\d.]+)', content),
-                    "ROC Temp": re.search(r'ROC temperature.*\(Degree Celsius\)\s*=\s*([^\s]+)', content),
-                    "CV Temp": re.search(r'Temperature\s*([^\s]+)', content),
-                    "BBU Status": re.search(r'BBU Status =\s*([^\s]+)', content),
-                    "CC Status": re.search(r'CC is\s*(.+)', content)
+                    "SAB Ver": re.search(r'#SAB version\s+([^\s]+)', content),
+                    "Rep Ver": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
+                    "Rapid Ver": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
+                    "UI Ver": re.search(r'version\s*=\s*"([^"]+)"', content),
+                    "CLI Ver": re.search(r'CLI Version:\s*([\d.]+)', content),
+                    "ROC(C)": re.search(r'ROC temperature.*\(Degree Celsius\)\s*=\s*([^\s]+)', content),
+                    "CV(C)": re.search(r'Temperature\s*([^\s]+)', content),
+                    "BBU": re.search(r'BBU Status =\s*([^\s]+)', content),
+                    "CC Status": re.search(r'CC is\s*(.+)', content),
+                    "RC Model": re.search(r'Model =\s\S+\s\S+\s\S+\s(\S+)', content),
+                    "FW Ver": re.search(r'Firmware Version\s+=\s(.+)', content)
+                    
+                    
                 } 
         #If pmc file does not include desired values
-                if basic_info["UI Version"] == None:
+                if basic_info["UI Ver"] == None:
                     with open(version_file, "r") as file2:
                         content_version = file2.read()
-                        basic_info["UI Version"] = re.search(r'UI Version:\s*([\d.]+)', content_version)
+                        basic_info["UI Ver"] = re.search(r'UI Version:\s*([\d.]+)', content_version)
         else:
             # Extract versions from version file
             with open(version_file, "r") as file:
-                content = file.read()
+                content_ver = file.read()
                 basic_info = {
-                    "UI Version": re.search(r'UI Version:\s*([\d.]+)', content),
-                    "CLI Version": re.search(r'CLI Version:\s*([\d.]+)', content),
-                    "SAB Version": re.search(r'SAB Version:\s*([\d.]+)', content)
+                    "UI Ver": re.search(r'UI Version:\s*([\d.]+)', content_ver),
+                    "CLI Ver": re.search(r'CLI Version:\s*([\d.]+)', content_ver),
+                    "SAB Ver": re.search(r'SAB Version:\s*([\d.]+)', content_ver)
                 }
-            if cfg_file:
+            if cfg_match:
                 with open(cfg_file, "r") as file:
-                    content = file.read()
-                    basic_info = {
-                        "RC Model": re.search(r'Product Name:\s*([\S.]+)', content)
-                    }
-            if adapt_file:
+                    content_cfg = file.read()
+                    basic_info["RC Model"] = re.search(r'Product Name:\s\S+\s\S+\s\S+\s(\S+)', content_cfg)
+            if adapt_match:
                 with open(adapt_file, "r") as file:
-                    content = file.read()
-                    basic_info = {
-                        "Firmware Version": re.search(r'FW Version\s+:\s(.+)', content)
-                    }
+                    content_ada = file.read()
+                    basic_info["Firmware Version"] = re.search(r'FW Version\s+:(.+)', content_ada)
+            if call_match:
+                with open(call_file, "r") as file:
+                    content_call = file.read()
+                    basic_info["Firmware Version"] = re.search(r'FW Version\s=\s(.+)', content_call)
+                    basic_info["RC Model"] = re.search(r'Product Name =\s\S+\s\S+\s\S+\s(\S+)', content_call)
+                
         for name, match in basic_info.items():
             if match:
                 sys_info[name] = match.group(1)
@@ -899,12 +912,12 @@ def extract_sysinfo():
                 voltage_match = re.search(r"Input Voltage\s*\|\s*([\d.]+)\s*V", line)
                 current_match = re.search(r"Input Current \s*\|\s*([\d.]+)\s*A", line) 
                 if uptime_match:
-                    sys_info["Uptime (days)"] = int(uptime_match.group(1))
+                    sys_info["Uptime (D)"] = int(uptime_match.group(1))
                     break
                 else:
-                    sys_info["Uptime (days)"] = 0
+                    sys_info["Uptime (D)"] = 0
                 if serial_match:
-                     sys_info["Serial Number"] = serial_match.group(1)
+                     sys_info["SN"] = serial_match.group(1)
                 if voltage_match:
                     sys_info[f"Voltage{voltage_index}"] = float(voltage_match.group(1))
                     voltage_index += 1
@@ -1791,7 +1804,16 @@ def pool_info():
                     lun_size = lun_size_match.group(1) if lun_size_match else "N/A"
                     raid["LUN Name"] = lun_name
                     raid["LUN Size"] = lun_size
+                    if pool_name == "OS":
+                        raid["LUN Name"] = "OS"
+                        raid["LUN Size"] = "256Gb"
+                    if pool_name == "RAPIDSTORE":
+                        if raid["LUN Name"] == "":
+                            raid["LUN Name"] = "RAPIDSTORE"
+                            raid["LUN Size"] = "-"
                     raid_merge.append(raid)
+                #We add imaginary luns to include the OS and RAPIDSTORE drives
+                   
     #Add front end name for pools from database
     for raids in raid_merge if disk_blocks else pool_data:
         db_dir = "./Database"
@@ -2160,7 +2182,7 @@ if __name__ == "__main__":
     year, month, day = parse_date(log_date)
     jalalidate = convertdate(year, month, day)
     ID = get_ID()
-    if ID == " " or "SAB":
+    if ID == " ":
         ID= input("Please enter Name+ID for the product\n")
     chassischart = chassis_chart()
     # Read the log files
