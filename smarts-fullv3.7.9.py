@@ -858,12 +858,12 @@ def extract_sysinfo():
                     "Rep Ver": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
                     "Rapid Ver": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
                     "UI Ver": re.search(r'version\s*=\s*"([^"]+)"', content),
-                    "CLI Ver": re.search(r'CLI Version:\s*([\d.]+)', content),
+                    "CLI Ver": re.search(r'CLI Version:\s*(.+)', content),
                     "ROC(C)": re.search(r'ROC temperature.*\(Degree Celsius\)\s*=\s*([^\s]+)', content),
                     "CV(C)": re.search(r'Temperature\s*([^\s]+)', content),
                     "BBU": re.search(r'BBU Status =\s*([^\s]+)', content),
                     "CC Status": re.search(r'CC is\s*(.+)', content),
-                    "RC Model": re.search(r'Model =\s\S+\s\S+\s\S+\s(\S+)', content),
+                    "RC Model": re.search(r'Model\s+=\s+(.+)', content),
                     "FW Ver": re.search(r'Firmware Version\s+=\s(.+)', content)
                     
                     
@@ -901,9 +901,9 @@ def extract_sysinfo():
                 sys_info[name] = match.group(1)
             else:
                 sys_info[name] = "Not Found"
-        if "BBU Status" in sys_info:
-           bbu_value = "Unknown" if sys_info["BBU Status"] is None else sys_info["BBU Status"]
-           sys_info["BBU Status"] = "OK" if bbu_value == "0" else "Not OK"
+        if "BBU" in sys_info:
+           bbu_value = "Unknown" if sys_info["BBU"] is None else sys_info["BBU"]
+           sys_info["BBU"] = "OK" if bbu_value == "0" else "Not OK"
         # Extract uptime and serial number from SystemInfo.mylinux
         with open(sysinfo_file, "r") as file:
             for line in file:
@@ -972,8 +972,9 @@ def extract_host_info():
                 current_wwn = None
             elif 'LPort' in line and current_wwn:
                 port_type = "LPort (private loop)"
-                current_wwn = None
                 target_port_type[current_wwn] = port_type
+                current_wwn = None
+                
     else:
         systemstat_dir = os.path.join(script_dir, "Logs")
         systemstat_file = sorted(glob.glob(os.path.join(systemstat_dir, "system_status_20*.txt")), reverse=True)
@@ -1105,7 +1106,7 @@ def extract_host_info():
                         initiator = initiator if initiator else "-"
                         target = data["target_map"].get(initiator, "-")
                         port_type = target_port_type.get(target, "-") if target_port_type else "-"
-                        
+                            
                         if not data["luns"]:
                             host_data.append({
                                 "Access Control": access_control,
@@ -1507,7 +1508,7 @@ def lom_chassis(is_hdd):
         if plane_cntr > 1:
             is_jbod = True
         for line in file:
-            if "Port 4 - 7" in line:
+            if "Port 4 - 7" or "C0.1" in line:
                 size = "4U"
                 ff = "36"
             if " 24 " in line and size == "2U":
@@ -1525,13 +1526,17 @@ def lom_chassis(is_hdd):
                 ram_match = re.search(mempattern, line)
                 if ram_match:
                     ramsize = ram_match.group(1)
-                    if int(ramsize) > 32:
+                    if int(ramsize) > 32 and is_allflash:
                         sab_model = "AF"
     elif os.path.exists(eall_show_file):
         with open(eall_show_file, "r") as file:
             for line in file:
                 if "SMC" in line:
                     chassis_type = "SuperMicro"
+    else:
+        print("No eall_show_all file detected. Cannot extract Chassis type")
+        return []
+                    
     if sab_model == "DT":
         sab_model = "DT"
     elif is_allflash:
@@ -1804,15 +1809,16 @@ def pool_info():
                     lun_size = lun_size_match.group(1) if lun_size_match else "N/A"
                     raid["LUN Name"] = lun_name
                     raid["LUN Size"] = lun_size
-                    if pool_name == "OS":
-                        raid["LUN Name"] = "OS"
-                        raid["LUN Size"] = "256Gb"
                     if pool_name == "RAPIDSTORE":
                         if raid["LUN Name"] == "":
                             raid["LUN Name"] = "RAPIDSTORE"
                             raid["LUN Size"] = "-"
                     raid_merge.append(raid)
                 #We add imaginary luns to include the OS and RAPIDSTORE drives
+                if raids["Pool Name"] == "OS":
+                    raids["LUN Name"] = "OS"
+                    raids["LUN Size"] = "256Gb"
+                    raid_merge.append(raids)
                    
     #Add front end name for pools from database
     for raids in raid_merge if disk_blocks else pool_data:
@@ -1987,7 +1993,7 @@ def get_ID():
         else:
             return " "
     else:
-        return "SAB"
+        return "sab"
 def output_name(ID, Date):
     return "smart" + "-"+ ID + "_" + Date + ".xlsx"
 #Change log name for old logs needs rework
@@ -2182,7 +2188,7 @@ if __name__ == "__main__":
     year, month, day = parse_date(log_date)
     jalalidate = convertdate(year, month, day)
     ID = get_ID()
-    if ID == " ":
+    if ID == " " or ID == "sab":
         ID= input("Please enter Name+ID for the product\n")
     chassischart = chassis_chart()
     # Read the log files
