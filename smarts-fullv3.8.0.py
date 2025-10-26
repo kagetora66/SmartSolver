@@ -1508,7 +1508,7 @@ def lom_chassis(is_hdd):
         if plane_cntr > 1:
             is_jbod = True
         for line in file:
-            if "Port 4 - 7" or "C0.1" in line:
+            if "Port 4 - 7" in line or "C0.1" in line:
                 size = "4U"
                 ff = "36"
             if " 24 " in line and size == "2U":
@@ -1534,8 +1534,11 @@ def lom_chassis(is_hdd):
                 if "SMC" in line:
                     chassis_type = "SuperMicro"
     else:
-        print("No eall_show_all file detected. Cannot extract Chassis type")
-        return []
+        print("No eall_show_all file detected.")
+        with open(eall_file, "r") as file:
+            for line in file:
+                if "380-23710" in line:
+                    chassis_type = "Chenbro"
                     
     if sab_model == "DT":
         sab_model = "DT"
@@ -1544,6 +1547,10 @@ def lom_chassis(is_hdd):
     expander =0
     if plane_cntr >1:
         expander = 1
+    print(chassis_type)
+    print(ff)
+    print(size)
+    print(sab_model)
     for part in partnums_chassis:
         if part["Type"] == chassis_type and part["FF"] == ff and part["Size"] == size and sab_model in part["Description"]:
             chassis_lom.append({
@@ -1817,7 +1824,7 @@ def pool_info():
                 #We add imaginary luns to include the OS and RAPIDSTORE drives
                 if raids["Pool Name"] == "OS":
                     raids["LUN Name"] = "OS"
-                    raids["LUN Size"] = "256Gb"
+                    raids["LUN Size"] = "n/a"
                     raid_merge.append(raids)
                    
     #Add front end name for pools from database
