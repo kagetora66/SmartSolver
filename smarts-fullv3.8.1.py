@@ -635,7 +635,8 @@ def log_extract(log_path):
         content = file.read()
         content_clean = content.replace(b'\x00', b'')
         content_uft8 = content_clean.decode('ascii', errors='ignore')
-        lines = content_uft8.splitlines()
+        content_excel_safe = re.sub(r'[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]', '', content_uft8)
+        lines = content_excel_safe.splitlines() 
         recent_lines = lines[-1000:]
         if "dmesg" in log_path:
             return {"Logs": recent_lines}
@@ -1539,6 +1540,9 @@ def lom_chassis(is_hdd):
             for line in file:
                 if "380-23710" in line:
                     chassis_type = "Chenbro"
+                if "SC8" in line:
+                    chassis_type = "Supermicro"
+                    
                     
     if sab_model == "DT":
         sab_model = "DT"
@@ -1547,10 +1551,6 @@ def lom_chassis(is_hdd):
     expander =0
     if plane_cntr >1:
         expander = 1
-    print(chassis_type)
-    print(ff)
-    print(size)
-    print(sab_model)
     for part in partnums_chassis:
         if part["Type"] == chassis_type and part["FF"] == ff and part["Size"] == size and sab_model in part["Description"]:
             chassis_lom.append({
