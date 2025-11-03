@@ -1470,7 +1470,7 @@ def lom_chassis(is_hdd):
     is_allflash = True
     sab_model = "DT"
     size = "2U"
-    ff = "12" #default
+    ff = 0 #default
     module = "Chassis"
     """TODO : JBOD code needs reworking to catch all types. For now, chassis type and sizes are assumed the same as DPE. (group JBODS together from systemstatus and search by enclosure for type"""
     chassis_type = "Chenbro" #default because i have no idea how gooxi is inside logs
@@ -1509,12 +1509,16 @@ def lom_chassis(is_hdd):
         if plane_cntr > 1:
             is_jbod = True
         for line in file:
-            if "Port 4 - 7" in line or "C0.1" in line:
+            slot_number_pattern = r'[0-9]+\s+[A-Z]+\s+([0-9]+)'
+            slot_match = re.search(slot_number_pattern, line)
+            if slot_match:
+                slot_number = int(slot_match.group(1))
+                if slot_number == 12 or slot_number == 24:
+                    ff += slot_number
+            if "C0.1" in line:
                 size = "4U"
                 ff = "36"
-            if " 24 " in line and size == "2U":
-                #size = "4U"
-                ff = "24"
+        ff = str(ff)
     #Extracting chassis type from output or log files
     output_file = os.path.join(script_dir, "output.txt")
     if os.path.exists(output_file):
@@ -1542,7 +1546,6 @@ def lom_chassis(is_hdd):
                     chassis_type = "Chenbro"
                 if "SC8" in line:
                     chassis_type = "Supermicro"
-                    
                     
     if sab_model == "DT":
         sab_model = "DT"
