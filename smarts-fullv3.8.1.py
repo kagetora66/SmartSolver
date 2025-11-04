@@ -1518,6 +1518,8 @@ def lom_chassis(is_hdd):
             if "C0.1" in line:
                 size = "4U"
                 ff = "36"
+        if ff > 12 and sab_model != "DT":
+            size = "4U"
         ff = str(ff)
     #Extracting chassis type from output or log files
     output_file = os.path.join(script_dir, "output.txt")
@@ -1552,7 +1554,7 @@ def lom_chassis(is_hdd):
     elif is_allflash:
         sab_model = "AF"
     expander =0
-    if plane_cntr >1:
+    if plane_cntr > 1:
         expander = 1
     for part in partnums_chassis:
         if part["Type"] == chassis_type and part["FF"] == ff and part["Size"] == size and sab_model in part["Description"]:
