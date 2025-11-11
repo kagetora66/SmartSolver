@@ -1483,8 +1483,6 @@ def lom_chassis(is_hdd):
     #Here we get U number and FF
     eall_file = os.path.join(script_dir, "SystemOverallInfo", "storcli-Eall-show.mylinux")
     eall_show_file = os.path.join(script_dir, "SystemOverallInfo", "storcli-Eall-show-all.mylinux")
-    if not os.path.isfile(eall_file):
-        return []
     with open(sysinfo_file, "r") as file:
         for line in file:
             if "CPU2" in line:
@@ -1502,12 +1500,7 @@ def lom_chassis(is_hdd):
                 "Count": 1
                })
                 return chassis_lom
-            if "Port 0 - 3" in line:
-                #we detect the number of chassis by counting front planes
-                plane_cntr += 1
     with open(eall_file, "r") as file:
-        if plane_cntr > 1:
-            is_jbod = True
         for line in file:
             slot_number_pattern = r'[0-9]+\s+[A-Z]+\s+([0-9]+)'
             slot_match = re.search(slot_number_pattern, line)
@@ -1517,9 +1510,21 @@ def lom_chassis(is_hdd):
                     ff += slot_number
             if "C0.1" in line:
                 size = "4U"
-                ff = "36"
+               # ff = "36"
+            if "380-23710" in line:
+                chassis_type = "Chenbro"
+            if "x28" in line or "x40" in line:
+                chassis_type = "SuperMicro" 
         if ff > 12 and sab_model != "DT":
             size = "4U"
+
+        #Detecting JBOD we assume each JBOD is 36 disks
+        #Safer approach is to use ProdID or x40/x28 in VencdorSpecific TODO
+        if ff > 36:
+            plane_cntr += 1
+            ff = 36
+        if plane_cntr > 0:
+            is_jbod = True
         ff = str(ff)
     #Extracting chassis type from output or log files
     output_file = os.path.join(script_dir, "output.txt")
@@ -1542,19 +1547,14 @@ def lom_chassis(is_hdd):
                     chassis_type = "SuperMicro"
     else:
         print("No eall_show_all file detected.")
-        with open(eall_file, "r") as file:
-            for line in file:
-                if "380-23710" in line:
-                    chassis_type = "Chenbro"
-                if "SC8" in line:
-                    chassis_type = "Supermicro"
+
                     
     if sab_model == "DT":
         sab_model = "DT"
     elif is_allflash:
         sab_model = "AF"
     expander =0
-    if plane_cntr > 1:
+    if plane_cntr > 0:
         expander = 1
     for part in partnums_chassis:
         if part["Type"] == chassis_type and part["FF"] == ff and part["Size"] == size and sab_model in part["Description"]:
@@ -1569,9 +1569,8 @@ def lom_chassis(is_hdd):
                "Module Name": module,
                "Description": part["Description"],
                "Part Number": part["Part Number"],
-               "Count": plane_cntr - 1
+               "Count": plane_cntr
            })
-
     return chassis_lom
 def chassis_chart():
     script_dir = os.path.dirname(os.path.abspath(__file__))
