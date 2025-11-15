@@ -1515,7 +1515,7 @@ def lom_chassis(is_hdd):
                 chassis_type = "Chenbro"
             if "x28" in line or "x40" in line:
                 chassis_type = "SuperMicro" 
-        if ff > 12 and sab_model != "DT":
+        if ff > 12:
             size = "4U"
 
         #Detecting JBOD we assume each JBOD is 36 disks
