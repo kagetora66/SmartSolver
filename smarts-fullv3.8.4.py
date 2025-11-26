@@ -687,6 +687,7 @@ def extract_device_info(log_content, enclosure):
          slot = "-"
          model = "-"
          state = "-"
+         ss_media = "-"
          if serial_number:
              if temp_match:
                  temperature = f"{temp_match.group(1)}"
@@ -713,6 +714,8 @@ def extract_device_info(log_content, enclosure):
                          hours = enc["Raw Value"]
                      if enc["Parameter"] == "Percent Life Time Remaining":
                          percent_life = enc["Raw Value"]
+                     if enc["Parameter"] == "SS Media used endurance indicator %":
+                         ss_media = enc["Raw Value"]
              if hours_match:
                  hours = hours_match.group(1)
              tmp_data.append({
@@ -721,13 +724,14 @@ def extract_device_info(log_content, enclosure):
                 "Model": model,
                 "Disk State": state,
                 "Serial Number": serial_number,
-                "Temperature": temperature,
+                "Temp": temperature,
                 "Powered Up Hours": hours,
                 "TBW": tsw,
                 "TBW-WAF2": tsw_waf2,
                 "TBW-WAF4": tsw_waf4,
                 "TBW (Ctl)": tsw_ctl,
-                "Percent Life": percent_life
+                "Percent Life": percent_life,
+                "Endurance": ss_media
                 })
 
          elif serial_number:
@@ -743,13 +747,14 @@ def extract_device_info(log_content, enclosure):
                  "Model": model,
                  "Disk State": state,
                  "Serial Number": serial_number,
-                 "Temperature": temperature,
+                 "Temp": temperature,
                  "Powered Up Hours": hours,
                  "TBW": tsw,
                  "TBW-WAF2": tsw_waf2,
                  "TBW-WAF4": tsw_waf4,
                  "TBW (Ctl)": tsw_ctl,
-                 "Percent Life": percent_life
+                 "Percent Life": percent_life,
+                 "Endurance": ss_media
                  })
 
     data.extend(tmp_data)
@@ -830,6 +835,34 @@ def extract_enclosure_slot_info(log_content, serial_numbers):
                         break
 
     return enclosure_slot_data
+def extract_fan_info():
+    #Needs rework
+    sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
+    pmc_file = glob.glob(os.path.join(script_dir, "output.txt"))
+    fan_info = []
+    if pmc_file:
+        with open(pmc_file[0], "r") as file:
+            content = file.read()
+            fan_info.append({
+                "ROC(C)": re.search(r'ROC temperature.*\(Degree Celsius\)\s*=\s*([^\s]+)', content).group(1),
+                "CV(C)": re.search(r'Temperature\s*([^\s]+)', content).group(1),
+                "FAN SPEED MODE": re.search(r'Current Fan Speed Mode is \[(.+)\]', content).group(1)
+            })
+    with open(sysinfo_file, "r") as file:
+            lines = file.readlines()
+            #need to consider fail instead of OK as well
+            fan_pattern = r'OK\s\|\s+.+(FAN[0-9]|FAN[A-Z])\s+\|\s+([0-9]+\sRPM)+\s\|\s+[0-9]+\sRPM+\s\|\s+[0-9]+' 
+            for line in lines:
+                fan_match = re.search(fan_pattern, line)
+                if fan_match:
+                    fan_info.append({
+                        "FAN Status": "OK",
+                        "FAN NAME" : fan_match.group(1),
+                        "CURRENT RPM" : fan_match.group(2)
+                    })
+             
+    return fan_info
+            
 def extract_sysinfo():
     sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
     version_file = os.path.join(script_dir, "version")
@@ -860,14 +893,10 @@ def extract_sysinfo():
                     "Rapid Ver": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
                     "UI Ver": re.search(r'version\s*=\s*"([^"]+)"', content),
                     "CLI Ver": re.search(r'CLI Version:\s*(.+)', content),
-                    "ROC(C)": re.search(r'ROC temperature.*\(Degree Celsius\)\s*=\s*([^\s]+)', content),
-                    "CV(C)": re.search(r'Temperature\s*([^\s]+)', content),
                     "BBU": re.search(r'BBU Status =\s*([^\s]+)', content),
                     "CC Status": re.search(r'CC is\s*(.+)', content),
                     "RC Model": re.search(r'Model\s+=\s+(.+)', content),
                     "FW Ver": re.search(r'Firmware Version\s+=\s(.+)', content)
-                    
-                    
                 } 
         #If pmc file does not include desired values
                 if basic_info["UI Ver"] == None:
@@ -2234,6 +2263,8 @@ if __name__ == "__main__":
     host_data = extract_host_info()
     # Extract General Device Info
     sys_info = extract_sysinfo()
+    # Extract fan data
+    fan_data = extract_fan_info()
     # Extract enclosure/slot information
     serial_numbers = set([disk["Serial Number"] for disk in ssd_data + hdd_data if disk["Serial Number"] != "Unknown"])
     enclosure_slot_data = []
@@ -2317,6 +2348,9 @@ if __name__ == "__main__":
         if sys_info:
             df_host = pd.DataFrame(sys_info)
             df_host.to_excel(writer, sheet_name="General System Info", index=False)
+        if fan_data:
+            df_fan = pd.DataFrame(fan_data)
+            df_fan.to_excel(writer, sheet_name="FAN-Temp", index=False)
         if slot_info:
             write_slot_info_sheet(writer, slot_info)
         if ssd_lom or hdd_lom or lom_cards_final or chassis_lom:
@@ -2563,7 +2597,61 @@ if __name__ == "__main__":
                             percent_life_cell.fill = red_fill
                         if percent_life > LOW_THRESHOLD_PLIFE:
                             percent_life_cell.fill = yellow_fill
-
+            if "General System Info" in wb.sheetnames:
+                ws = wb["General System Info"]
+                CURRENT_HIGH_THRESHOLD = 2.0
+                CURRENT_LOW_THRESHOLD = 0.03
+                VOLTAGE_HIGH_THRESHOLD = 240.0
+                VOLTAGE_LOW_THRESHOLD = 180.0
+                Voltage_1_col = 12
+                Current_1_col = 13
+                Voltage_2_col = 14
+                Current_2_col = 15
+                for row in ws.iter_rows(min_row=2):# Skip header row (row 1)
+                    if row.__len__() >14:
+                        current_1_cell = row[Current_1_col]
+                        current_2_cell = row[Current_2_col]
+                        vol_1_cell = row[Voltage_1_col]
+                        vol_2_cell = row[Voltage_2_col]
+                        if current_1_cell.value > CURRENT_HIGH_THRESHOLD or current_1_cell.value < CURRENT_LOW_THRESHOLD:
+                            current_1_cell.fill = yellow_fill
+                        if current_2_cell.value > CURRENT_HIGH_THRESHOLD or current_2_cell.value < CURRENT_LOW_THRESHOLD:
+                            current_2_cell.fill = yellow_fill
+                    else:
+                        new_Voltage_1_col = 5
+                        new_Current_1_col = 6
+                        new_Voltage_2_col = 7
+                        new_Current_2_col = 8
+                        current_1_cell = row[new_Current_1_col]
+                        current_2_cell = row[new_Current_2_col]
+                        vol_1_cell = row[new_Voltage_1_col]
+                        vol_2_cell = row[new_Voltage_2_col]
+                        if current_1_cell.value > CURRENT_HIGH_THRESHOLD or current_1_cell.value < CURRENT_LOW_THRESHOLD:
+                            current_1_cell.fill = yellow_fill
+                        if current_2_cell.value > CURRENT_HIGH_THRESHOLD or current_2_cell.value < CURRENT_LOW_THRESHOLD:
+                            current_2_cell.fill = yellow_fill
+            if "FAN-Temp" in wb.sheetnames:
+                #Needs rework
+                ws = wb["FAN-Temp"]
+                CV_HIGH_THRESHOLD = 30
+                CV_MAX_THRESHOLD = 35
+                RC_HIGH_THRESHOLD = 65
+                RC_MAX_THRESHOLD = 60
+                ws.max_column
+                if ws.max_column > 3:
+                    cv_cell = ws.cell(2,2)
+                    rc_cell = ws.cell(2,1)
+                    if int(rc_cell.value) > RC_MAX_THRESHOLD and int(rc_cell.value) < RC_HIGH_THRESHOLD:
+                        rc_cell.fill = yellow_fill
+                    elif int(rc_cell.value) > RC_HIGH_THRESHOLD:
+                        rc_cell.fill = red_fill
+                    if int(cv_cell.value) > CV_MAX_THRESHOLD and int(cv_cell.value) < CV_HIGH_THRESHOLD:
+                        cv_cell.fill = yellow_fill
+                    elif int(cv_cell.value) > CV_HIGH_THRESHOLD:
+                        cv_cell.fill = red_fill
+                            
+                        
+                
             if "Pool Data" in wb.sheetnames:
                 ws = wb["Pool Data"]
                 HOTSPARE_COL = 13
