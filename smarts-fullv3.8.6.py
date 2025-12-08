@@ -1515,44 +1515,58 @@ def lom_chassis(is_hdd):
     sys_stat_dir = os.path.join(script_dir, "SysStat")
     systat_files = sorted(glob.glob(os.path.join(sys_stat_dir, "sab-sysstat-*.txt")), reverse=True)
     input_systat = systat_files[0] if systat_files else None
+    pmc_files = glob.glob(os.path.join(script_dir, "output.txt"))
     with open(sysinfo_file, "r") as file:
         for line in file:
             if "CPU2" in line:
                 if "OK" in line:
                     sab_model = "HB"
+    is_vr = False
     with open(eall_file, "r") as file:
         plane_cntr = 0
         #Here we check if we have SAB VR
         for line in file:
             if "KVM" in line:
-                with open(input_systat, "r") as file:
-                    cpu_pattern = r'([0-9]+) CPU'
-                    for sysline in file:
-                        cpu_match = re.search(cpu_pattern, sysline)
-                        if cpu_match:
-                            cpu_count = int(cpu_match.group(1))
-                description = "N/A"
-                if cpu_count == 40:
-                    vr_model = "A7700"
-                    description = "HPDS SAB VR 12 Bay"
-                elif cpu_count > 40:
-                    vr_model = "A7900"
-                    description = "HPDS SAB VR 12 Bay"
-                chassis_lom.append({
-                "Module Name": module,
-                "Description": description,
-                "Part Number": vr_model,
-                "Count": 1
-               })
-                return chassis_lom
+                description = "HPDS SAB VR"
+                vr_model = "VR"
+                is_vr = True
+                if input_systat:
+                    with open(input_systat, "r") as file:
+                        cpu_pattern = r'([0-9]+) CPU'
+                        for sysline in file:
+                            cpu_match = re.search(cpu_pattern, sysline)
+                            if cpu_match:
+                                cpu_count = int(cpu_match.group(1))
+                                if cpu_count == 40:
+                                    vr_model = "A7700"
+                                    description = "HPDS SAB VR 12 Bay"
+                                elif cpu_count == 56:
+                                    vr_model = "A7900"
+                                    description = "HPDS SAB VR 12 Bay"
+                                elif cpu_count == 64:
+                                    vr_model = "A8600"
+                elif pmc_files:
+                   pmc_file = pmc_files[0]
+                   with open(pmc_file, "r") as file:
+                       cpu_pattern = r'^CPU\(s\):\s+([0-9]+)'
+                       for line in file:
+                           cpu_match = re.search(cpu_pattern, line)
+                           if cpu_match:
+                               cpu_count = int(cpu_match.group(1))
+                               if cpu_count == 40:
+                                   vr_model = "A7700"
+                                   description = "HPDS SAB VR 12 Bay"
+                               elif cpu_count > 40:
+                                   vr_model = "A7900"
+                                   description = "HPDS SAB VR 12 Bay"
     with open(eall_file, "r") as file:
         for line in file:
             slot_number_pattern = r'[0-9]+\s+[A-Z]+\s+([0-9]+)'
             slot_match = re.search(slot_number_pattern, line)
             if slot_match:
                 slot_number = int(slot_match.group(1))
-                #if slot_number == 12 or slot_number == 24:
-                ff += slot_number
+                if slot_number > 8:
+                    ff += slot_number
             if "C0.1" in line:
                 size = "4U"
             if "380-23710" in line:
@@ -1569,6 +1583,23 @@ def lom_chassis(is_hdd):
         if ff > 36:
             plane_cntr += 1
             ff = 36
+        if is_vr:
+            print(ff)
+            if ff == 24:
+                description = "HPDS VR 24 BAY"
+            if ff == 12:
+                description = "HPDS VR 12 BAY"
+            if ff == 36:
+                description = "HPDS VR 36 BAY"
+                vr_model = "VR8700"
+            chassis_lom.append({
+                "Module Name": module,
+                "Description": description,
+                "Part Number": vr_model,
+                "Count": 1
+               })
+            return chassis_lom
+
         if plane_cntr > 0:
             is_jbod = True
         ff = str(ff)
@@ -2218,6 +2249,22 @@ def about_info():
         "Script Version" : script_ver
         })
     return about
+#This is for extracting columns from header
+def find_by_header(ws, header):
+       # Get the search string in the appropriate case
+    search_string = header
+    # Iterate through cells in the first row
+    for cell in ws[1]:  # ws[1] gives all cells in the first row
+        if cell.value is not None:
+            cell_value = str(cell.value)
+            # Compare based on case sensitivity setting
+            if cell_value == search_string:
+                return cell.column  # Returns column number (1-indexed)
+            if cell_value.lower() == search_string:
+                return cell.column  # Returns column number (1-indexed)
+    
+    return None  # Return None if not found 
+    
 ################################## main part of script ##########################################
 if __name__ == "__main__":
     #Extract files
@@ -2625,10 +2672,10 @@ if __name__ == "__main__":
                 CURRENT_LOW_THRESHOLD = 0.03
                 VOLTAGE_HIGH_THRESHOLD = 240.0
                 VOLTAGE_LOW_THRESHOLD = 180.0
-                Voltage_1_col = 12
-                Current_1_col = 13
-                Voltage_2_col = 14
-                Current_2_col = 15
+                Voltage_1_col = find_by_header(ws, "Voltage1") - 1
+                Current_1_col = find_by_header(ws, "Current1") - 1
+                Voltage_2_col = find_by_header(ws, "Voltage2") - 1
+                Current_2_col = find_by_header(ws, "Current2") - 1
                 for row in ws.iter_rows(min_row=2):# Skip header row (row 1)
                     if row.__len__() >14:
                         current_1_cell = row[Current_1_col]
@@ -2640,14 +2687,10 @@ if __name__ == "__main__":
                         if current_2_cell.value > CURRENT_HIGH_THRESHOLD or current_2_cell.value < CURRENT_LOW_THRESHOLD:
                             current_2_cell.fill = yellow_fill
                     else:
-                        new_Voltage_1_col = 7
-                        new_Current_1_col = 8
-                        new_Voltage_2_col = 9
-                        new_Current_2_col = 10
-                        current_1_cell = row[new_Current_1_col]
-                        current_2_cell = row[new_Current_2_col]
-                        vol_1_cell = row[new_Voltage_1_col]
-                        vol_2_cell = row[new_Voltage_2_col]
+                        current_1_cell = row[Current_1_col]
+                        current_2_cell = row[Current_2_col]
+                        vol_1_cell = row[Voltage_1_col]
+                        vol_2_cell = row[Voltage_2_col]
                         if current_1_cell.value > CURRENT_HIGH_THRESHOLD or current_1_cell.value < CURRENT_LOW_THRESHOLD:
                             current_1_cell.fill = yellow_fill
                         if current_2_cell.value > CURRENT_HIGH_THRESHOLD or current_2_cell.value < CURRENT_LOW_THRESHOLD:
