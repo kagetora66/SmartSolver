@@ -1036,7 +1036,7 @@ def extract_host_info():
 
         # Manually parse TARGET blocks
         for line in lines:
-            target_match = re.match(r"\s*TARGET\s+([0-9a-fA-F:]+)\s*\{", line)
+            target_match = re.match(r"\s*TARGET\s+(.+)\s*\{", line)
             if target_match:
                 if current_target:
                     print("[WARNING] Nested TARGET found, skipping previous unfinished block.")
@@ -1066,7 +1066,7 @@ def extract_host_info():
                 access_control = group_name if group_name else "-"
                 
                 luns = re.findall(r"LUN\s+(\d+)\s+([\w_]+)", group_content)
-                initiators = re.findall(r"INITIATOR\s+([0-9a-fA-F:]+)", group_content)
+                initiators = re.findall(r"INITIATOR\s+(.+)", group_content)
 
                 unique_luns = sorted(set(luns), key=lambda x: int(x[0]))
                 unique_initiators = sorted(set(initiators))
@@ -1512,6 +1512,9 @@ def lom_chassis(is_hdd):
     #Here we get U number and FF
     eall_file = os.path.join(script_dir, "SystemOverallInfo", "storcli-Eall-show.mylinux")
     eall_show_file = os.path.join(script_dir, "SystemOverallInfo", "storcli-Eall-show-all.mylinux")
+    sys_stat_dir = os.path.join(script_dir, "SysStat")
+    systat_files = sorted(glob.glob(os.path.join(sys_stat_dir, "sab-sysstat-*.txt")), reverse=True)
+    input_systat = systat_files[0] if systat_files else None
     with open(sysinfo_file, "r") as file:
         for line in file:
             if "CPU2" in line:
@@ -1522,10 +1525,23 @@ def lom_chassis(is_hdd):
         #Here we check if we have SAB VR
         for line in file:
             if "KVM" in line:
+                with open(input_systat, "r") as file:
+                    cpu_pattern = r'([0-9]+) CPU'
+                    for sysline in file:
+                        cpu_match = re.search(cpu_pattern, sysline)
+                        if cpu_match:
+                            cpu_count = int(cpu_match.group(1))
+                description = "N/A"
+                if cpu_count == 40:
+                    vr_model = "A7700"
+                    description = "HPDS SAB VR 12 Bay"
+                elif cpu_count > 40:
+                    vr_model = "A7900"
+                    description = "HPDS SAB VR 12 Bay"
                 chassis_lom.append({
                 "Module Name": module,
-                "Description": "HPDS SAB VR",
-                "Part Number": "VR",
+                "Description": description,
+                "Part Number": vr_model,
                 "Count": 1
                })
                 return chassis_lom
@@ -1535,18 +1551,19 @@ def lom_chassis(is_hdd):
             slot_match = re.search(slot_number_pattern, line)
             if slot_match:
                 slot_number = int(slot_match.group(1))
-                if slot_number == 12 or slot_number == 24:
-                    ff += slot_number
+                #if slot_number == 12 or slot_number == 24:
+                ff += slot_number
             if "C0.1" in line:
                 size = "4U"
-               # ff = "36"
             if "380-23710" in line:
                 chassis_type = "Chenbro"
             if "x28" in line or "x40" in line:
                 chassis_type = "SuperMicro" 
         if ff > 12:
             size = "4U"
-
+        #For older faulty megacli logs
+        if ff > 100:
+            ff = 36
         #Detecting JBOD we assume each JBOD is 36 disks
         #Safer approach is to use ProdID or x40/x28 in VencdorSpecific TODO
         if ff > 36:
@@ -2211,6 +2228,7 @@ if __name__ == "__main__":
         extractor()
     # Path to the smarts.mylinux file in the /SystemOverallInfo directory
     smarts_file_path = os.path.join(script_dir, "SystemOverallInfo", "smarts.mylinux")
+    eall_file_path = os.path.join(script_dir, "SystemOverallInfo", "storcli-Eall-show.mylinux")
     dmesg_path =  os.path.join(script_dir, "Logs", "dmesg")
     dmesg = ""
     uilog = ""
@@ -2258,7 +2276,11 @@ if __name__ == "__main__":
     else:
         is_hdd = False
     #For Chassis LOM
-    chassis_lom = lom_chassis(is_hdd)
+    chassis_lom = []
+    if os.path.exists(eall_file_path):
+        chassis_lom = lom_chassis(is_hdd)
+    else:
+        print("Eall_show file not found in logs")
     # Extract host information
     host_data = extract_host_info()
     # Extract General Device Info
@@ -2618,10 +2640,10 @@ if __name__ == "__main__":
                         if current_2_cell.value > CURRENT_HIGH_THRESHOLD or current_2_cell.value < CURRENT_LOW_THRESHOLD:
                             current_2_cell.fill = yellow_fill
                     else:
-                        new_Voltage_1_col = 5
-                        new_Current_1_col = 6
-                        new_Voltage_2_col = 7
-                        new_Current_2_col = 8
+                        new_Voltage_1_col = 7
+                        new_Current_1_col = 8
+                        new_Voltage_2_col = 9
+                        new_Current_2_col = 10
                         current_1_cell = row[new_Current_1_col]
                         current_2_cell = row[new_Current_2_col]
                         vol_1_cell = row[new_Voltage_1_col]
