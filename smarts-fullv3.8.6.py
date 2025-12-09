@@ -1587,11 +1587,16 @@ def lom_chassis(is_hdd):
             print(ff)
             if ff == 24:
                 description = "HPDS VR 24 BAY"
-            if ff == 12:
+                vr_model = "A8600"
+            if ff == 12 and cpu_count > 40:
                 description = "HPDS VR 12 BAY"
+                vr_model = "A7900"
+            if ff == 12 and cpu_count < 41:
+                description = "HPDS VR 12 BAY"
+                vr_model = "A7700"
             if ff == 36:
                 description = "HPDS VR 36 BAY"
-                vr_model = "VR8700"
+                vr_model = "A8700"
             chassis_lom.append({
                 "Module Name": module,
                 "Description": description,
