@@ -1579,7 +1579,7 @@ def lom_chassis(is_hdd):
         if ff > 12 and chassis_type == "SuperMicro":
             size = "4U"
         #For older faulty megacli logs
-        if ff > 100:
+        if ff > 400:
             ff = 36
         #Detecting JBOD we assume each JBOD is 36 disks
         #Safer approach is to use ProdID or x40/x28 in VencdorSpecific TODO
@@ -1587,11 +1587,12 @@ def lom_chassis(is_hdd):
         if front_plane > 1:
             ff = 24
             plane_cntr += 1
-        if ff > 36 and front_plane < 1:
-            plane_cntr += 1
-            ff = 36
+        if ff >= 36 and front_plane < 1:
+            #assuming 36 jbods and 36 main chassis
+            while ff > 36:
+                ff -= 36
+                plane_cntr += 1
         if is_vr:
-            print(ff)
             if ff == 24:
                 description = "HPDS VR 24 BAY"
                 vr_model = "A8600"
@@ -1645,10 +1646,6 @@ def lom_chassis(is_hdd):
     expander =0
     if plane_cntr > 0:
         expander = 1
-    print(ff)
-    print(chassis_type)
-    print(size)
-    print(sab_model)
     for part in partnums_chassis:
         if part["Type"] == chassis_type and part["FF"] == ff and part["Size"] == size and sab_model in part["Description"]:
             chassis_lom.append({
