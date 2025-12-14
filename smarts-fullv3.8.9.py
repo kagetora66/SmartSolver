@@ -938,7 +938,7 @@ def extract_sysinfo():
         with open(sysinfo_file, "r") as file:
             for line in file:
                 uptime_match = re.search(r"up\s+(\d+)\s+days?", line)
-                serial_match = re.search(r"Serial Number:\s*ZM(\S+)", line)
+                serial_match = re.search(r"Serial Number:\s*[A-Z][A-Z](\S+)", line)
                 voltage_match = re.search(r"Input Voltage\s*\|\s*([\d.]+)\s*V", line)
                 current_match = re.search(r"Input Current \s*\|\s*([\d.]+)\s*A", line) 
                 if uptime_match:
@@ -2685,25 +2685,27 @@ if __name__ == "__main__":
                 CURRENT_LOW_THRESHOLD = 0.03
                 VOLTAGE_HIGH_THRESHOLD = 240.0
                 VOLTAGE_LOW_THRESHOLD = 180.0
-                Voltage_1_col = find_by_header(ws, "Voltage1") - 1
-                Current_1_col = find_by_header(ws, "Current1") - 1
-                Voltage_2_col = find_by_header(ws, "Voltage2") - 1
-                Current_2_col = find_by_header(ws, "Current2") - 1
+                if find_by_header(ws, "Voltage1"):
+                    Voltage_1_col = find_by_header(ws, "Voltage1") - 1
+                    Current_1_col = find_by_header(ws, "Current1") - 1
+                if find_by_header(ws, "Voltage2"):
+                    Voltage_2_col = find_by_header(ws, "Voltage2") - 1
+                    Current_2_col = find_by_header(ws, "Current2") - 1
                 for row in ws.iter_rows(min_row=2):# Skip header row (row 1)
                     if row.__len__() >14:
-                        current_1_cell = row[Current_1_col]
-                        current_2_cell = row[Current_2_col]
-                        vol_1_cell = row[Voltage_1_col]
-                        vol_2_cell = row[Voltage_2_col]
+                        current_1_cell = row[Current_1_col] if find_by_header(ws, "Voltage1") else 0
+                        current_2_cell = row[Current_2_col] if find_by_header(ws, "Voltage2") else 0
+                        vol_1_cell = row[Voltage_1_col] if find_by_header(ws, "Voltage1") else 0
+                        vol_2_cell = row[Voltage_2_col] if find_by_header(ws, "Voltage2") else 0
                         if current_1_cell.value > CURRENT_HIGH_THRESHOLD or current_1_cell.value < CURRENT_LOW_THRESHOLD:
                             current_1_cell.fill = yellow_fill
                         if current_2_cell.value > CURRENT_HIGH_THRESHOLD or current_2_cell.value < CURRENT_LOW_THRESHOLD:
                             current_2_cell.fill = yellow_fill
                     else:
-                        current_1_cell = row[Current_1_col]
-                        current_2_cell = row[Current_2_col]
-                        vol_1_cell = row[Voltage_1_col]
-                        vol_2_cell = row[Voltage_2_col]
+                        current_1_cell = row[Current_1_col] if find_by_header(ws, "Voltage1") else 0
+                        current_2_cell = row[Current_2_col] if find_by_header(ws, "Voltage2") else 0
+                        vol_1_cell = row[Voltage_1_col] if find_by_header(ws, "Voltage1") else 0
+                        vol_2_cell = row[Voltage_2_col] if find_by_header(ws, "Voltage2") else 0
                         if current_1_cell.value > CURRENT_HIGH_THRESHOLD or current_1_cell.value < CURRENT_LOW_THRESHOLD:
                             current_1_cell.fill = yellow_fill
                         if current_2_cell.value > CURRENT_HIGH_THRESHOLD or current_2_cell.value < CURRENT_LOW_THRESHOLD:
