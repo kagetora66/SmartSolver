@@ -1129,14 +1129,13 @@ def extract_host_info():
 
                     host_luns_initiators[host_name]["initiators"].append(initiator)
                     host_luns_initiators[host_name]["target_map"][initiator] = target_address
-
                 for host_name, data in host_luns_initiators.items():
                     host_name = host_name if host_name else "-"
                     for initiator in sorted(data["initiators"]):
                         initiator = initiator if initiator else "-"
                         target = data["target_map"].get(initiator, "-")
-                        port_type = target_port_type.get(target, "-") if target_port_type else "-"
-                            
+                        port_type = target_port_type.get(target.strip(), "na") if target_port_type else "-"
+                        
                         if not data["luns"]:
                             host_data.append({
                                 "Access Control": access_control,
@@ -1530,6 +1529,7 @@ def lom_chassis(is_hdd):
                 description = "HPDS SAB VR"
                 vr_model = "VR"
                 is_vr = True
+                cpu_count = 0
                 if input_systat:
                     with open(input_systat, "r") as file:
                         cpu_pattern = r'([0-9]+) CPU'
@@ -2546,8 +2546,8 @@ if __name__ == "__main__":
 
                 try:
                     threshold_value = float(threshold_str)
-                    threshold_caution = threshold_value * 1.5
-                    threshold_warning = threshold_value * 1.2
+                    threshold_caution = threshold_value * 1.5 if threshold_value != 0 else 30 
+                    threshold_warning = threshold_value * 1.2 if threshold_value != 0 else 20
                 except (ValueError, TypeError):
                     continue  # Skip non-numeric thresholds
 
@@ -2693,23 +2693,27 @@ if __name__ == "__main__":
                     Current_2_col = find_by_header(ws, "Current2") - 1
                 for row in ws.iter_rows(min_row=2):# Skip header row (row 1)
                     if row.__len__() >14:
-                        current_1_cell = row[Current_1_col] if find_by_header(ws, "Voltage1") else 0
-                        current_2_cell = row[Current_2_col] if find_by_header(ws, "Voltage2") else 0
-                        vol_1_cell = row[Voltage_1_col] if find_by_header(ws, "Voltage1") else 0
-                        vol_2_cell = row[Voltage_2_col] if find_by_header(ws, "Voltage2") else 0
-                        if current_1_cell.value > CURRENT_HIGH_THRESHOLD or current_1_cell.value < CURRENT_LOW_THRESHOLD:
-                            current_1_cell.fill = yellow_fill
-                        if current_2_cell.value > CURRENT_HIGH_THRESHOLD or current_2_cell.value < CURRENT_LOW_THRESHOLD:
-                            current_2_cell.fill = yellow_fill
+                        current_1_cell = row[Current_1_col] if find_by_header(ws, "Voltage1") else False
+                        current_2_cell = row[Current_2_col] if find_by_header(ws, "Voltage2") else False
+                        vol_1_cell = row[Voltage_1_col] if find_by_header(ws, "Voltage1") else False
+                        vol_2_cell = row[Voltage_2_col] if find_by_header(ws, "Voltage2") else False
+                        if current_1_cell:
+                            if current_1_cell.value > CURRENT_HIGH_THRESHOLD or current_1_cell.value < CURRENT_LOW_THRESHOLD:
+                                current_1_cell.fill = yellow_fill
+                        if current_2_cell:
+                            if current_2_cell.value > CURRENT_HIGH_THRESHOLD or current_2_cell.value < CURRENT_LOW_THRESHOLD:
+                                current_2_cell.fill = yellow_fill
                     else:
-                        current_1_cell = row[Current_1_col] if find_by_header(ws, "Voltage1") else 0
-                        current_2_cell = row[Current_2_col] if find_by_header(ws, "Voltage2") else 0
-                        vol_1_cell = row[Voltage_1_col] if find_by_header(ws, "Voltage1") else 0
-                        vol_2_cell = row[Voltage_2_col] if find_by_header(ws, "Voltage2") else 0
-                        if current_1_cell.value > CURRENT_HIGH_THRESHOLD or current_1_cell.value < CURRENT_LOW_THRESHOLD:
-                            current_1_cell.fill = yellow_fill
-                        if current_2_cell.value > CURRENT_HIGH_THRESHOLD or current_2_cell.value < CURRENT_LOW_THRESHOLD:
-                            current_2_cell.fill = yellow_fill
+                        current_1_cell = row[Current_1_col] if find_by_header(ws, "Voltage1") else False
+                        current_2_cell = row[Current_2_col] if find_by_header(ws, "Voltage2") else False
+                        vol_1_cell = row[Voltage_1_col] if find_by_header(ws, "Voltage1") else False
+                        vol_2_cell = row[Voltage_2_col] if find_by_header(ws, "Voltage2") else False
+                        if current_1_cell:
+                            if current_1_cell.value > CURRENT_HIGH_THRESHOLD or current_1_cell.value < CURRENT_LOW_THRESHOLD:
+                                current_1_cell.fill = yellow_fill
+                        if current_2_cell:
+                            if current_2_cell.value > CURRENT_HIGH_THRESHOLD or current_2_cell.value < CURRENT_LOW_THRESHOLD:
+                                current_2_cell.fill = yellow_fill
             if "FAN-Temp" in wb.sheetnames:
                 #Needs rework
                 ws = wb["FAN-Temp"]
