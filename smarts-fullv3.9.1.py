@@ -2729,10 +2729,11 @@ if __name__ == "__main__":
                         rc_cell.fill = yellow_fill
                     elif int(rc_cell.value) > RC_HIGH_THRESHOLD:
                         rc_cell.fill = red_fill
-                    if int(cv_cell.value) > CV_MAX_THRESHOLD and int(cv_cell.value) < CV_HIGH_THRESHOLD:
-                        cv_cell.fill = yellow_fill
-                    elif int(cv_cell.value) > CV_HIGH_THRESHOLD:
-                        cv_cell.fill = red_fill
+                    if cv_cell.value is int:
+                        if int(cv_cell.value) > CV_MAX_THRESHOLD and int(cv_cell.value) < CV_HIGH_THRESHOLD:
+                            cv_cell.fill = yellow_fill
+                        elif int(cv_cell.value) > CV_HIGH_THRESHOLD:
+                            cv_cell.fill = red_fill
                             
                         
                 
