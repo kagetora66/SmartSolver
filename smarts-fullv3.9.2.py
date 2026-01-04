@@ -1914,6 +1914,8 @@ def pool_info():
                         if raid["LUN Name"] == "":
                             raid["LUN Name"] = "RAPIDSTORE"
                             raid["LUN Size"] = "-"
+                        else:
+                            raid["LUN Name"] = raid["LUN Name"] + "*"
                     raid_merge.append(raid)
                 #We add imaginary luns to include the OS and RAPIDSTORE drives
                 if raids["Pool Name"] == "OS":
