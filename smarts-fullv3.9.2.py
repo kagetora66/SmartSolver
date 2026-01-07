@@ -663,6 +663,7 @@ def log_extract(log_path):
             processed_logs.append(" ".join(current_entry))
         
         return {"Log": processed_logs}
+
 # Function to extract HDD device info (only if both values are found)
 def extract_device_info(log_content, enclosure):
     data = []
@@ -835,6 +836,7 @@ def extract_enclosure_slot_info(log_content, serial_numbers):
                         break
 
     return enclosure_slot_data
+
 def extract_fan_info():
     #Needs rework
     sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
@@ -1242,6 +1244,7 @@ def extract_host_info():
     finally:
         if 'conn' in locals():
             conn.close()
+
 #convert wwn
 def convert_wwn_hex_to_colon_format(wwn_hex: str) -> str:
     """Convert WWN from hex string like '0x51402ec001c676bc' to colon-separated format."""
@@ -1249,6 +1252,7 @@ def convert_wwn_hex_to_colon_format(wwn_hex: str) -> str:
     if len(hex_clean) != 16:
         return wwn_hex  # Return as-is if not a valid WWN length
     return ":".join(hex_clean[i:i+2] for i in range(0, 16, 2))
+
 #Extract slot number
 def extract_slot_port_info():
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1333,6 +1337,7 @@ def extract_slot_port_info():
             })
 
         return result
+
 #For the purpose of counting disk type and size for LOM
 def consolidate_by_serial(smart_list):
     consolidated = {}
@@ -1359,6 +1364,7 @@ def consolidate_by_serial(smart_list):
             consolidated[serial][param] = raw_val
 
     return list(consolidated.values())
+
 def lom_disk(disk_dicts):
     type_size_list = []
     disk_data = consolidate_by_serial(disk_dicts)
@@ -1384,7 +1390,8 @@ def lom_disk(disk_dicts):
                     "Count": count
                 })
     return lom_disk_count
-#Extracts the data for fc ports
+
+#Extracts the data for LOM of ports
 def lom_cards():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
@@ -1436,6 +1443,7 @@ def lom_cards():
             })
 
     return result
+
 #Counts the FC/ISCSI ports from the output of lomfc_port
 def merge_duplicate_dicts(dict_list):
     # Convert each dict into a hashable sorted tuple
@@ -1450,6 +1458,7 @@ def merge_duplicate_dicts(dict_list):
         merged_dict["count"] = count
         result.append(merged_dict)
     return result
+
 #This part parses the information genereted by lom_ports into format suitable for LOM sheet
 def lom_card_parcer(cards):
     lom_cards = []
@@ -1482,6 +1491,7 @@ def lom_card_parcer(cards):
                     "Count": count
                 })
     return lom_cards
+
 def is_valid_json_file(file_path):
     try:
         with open(file_path, 'r') as f:
@@ -1493,6 +1503,7 @@ def is_valid_json_file(file_path):
     except FileNotFoundError:
         #print("File not found")
         return False
+
 def lom_chassis(is_hdd):
     chassis_lom = []
     is_allflash = True
@@ -1662,6 +1673,7 @@ def lom_chassis(is_hdd):
                "Count": plane_cntr
            })
     return chassis_lom
+
 def chassis_chart():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     systemstat_dir = os.path.join(script_dir, "Logs")
@@ -1732,14 +1744,14 @@ def pool_info():
     pattern = r"""
     ^\s*
     (\d+)\s*\/\s*(\d+)\s+       # 0/0, 1/1
-    (RAID[0-9]+|RAID[15]0|RAID5|OS)\s+  # RAID1, RAID5, OS
-    (\S+)\s+                     # Optl
-    (?:\S+)\s+                     # RW
-    (\S+)\s+                     # Yes
+    (RAID[0-9]+|RAID[15]0|RAID5|OS)\s+  # RAID Level
+    (\S+)\s+                     # Optl, etc
+    (?:\S+)\s+                     # RW, etc
+    (\S+)\s+                     # Yes or No
     (\S+)\s*-\s*                 # RWTD - , RWBC -
     (?:ON|OFF)?\s*               # ON (optional)
-    ([\d.,]+\s*[TGM]B)\s+        # 237.968 GB, 21.830 TB
-    (\S+)\s*                     # OS, Midrp_Glust
+    ([\d.,]+\s*[TGM]B)\s+        # Size of pool
+    (\S+)\s*                     # OS-etc
     $
     """
     if not os.path.isfile(storcli_vall_path):
@@ -1981,7 +1993,7 @@ def pool_info():
     sorted_blocks = sorted(sorted_pool_data, key=lambda x: int(x['dg']))
     return sorted_blocks
     
-#Extract the logs
+#Extract the logs. RUST binary (UNIX or Windows) is called here to recursively extract the .zip log
 def extractor():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     rust_binary = os.path.join(script_dir, "extractor.exe" if os.name == "nt" else "extractor")
@@ -2014,9 +2026,11 @@ def extractor():
     except subprocess.CalledProcessError as e:
         print(f"[Python] Rust extractor failed: {e}")
         return False
+
 # Reorder columns to make "Enclosure/Slot" the first column
 def reorder_columns(data):
     return [{"En/Slot": disk.get("En/Slot", "N/A"), **disk} for disk in data]
+#We use these series of function to generate date for output
 def get_date():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     sysinfo_file = os.path.join(script_dir, "SystemOverallInfo", "SystemInfo.mylinux")
@@ -2057,6 +2071,7 @@ def parse_date(date_str):
     """Convert 'YYYY/MM/DD' string into year, month, day integers"""
     year, month, day = map(int, date_str.split('/'))
     return year, month, day
+
 #Convert date from Gregorian to Jalali
 def convertdate(year, month, day):
     result =  dict()
@@ -2080,6 +2095,7 @@ def convertdate(year, month, day):
     result["day"] = 1 + ((days % 31) if (days < 186) else ((days - 186) % 30))
     jalalidate = str(result.get("year")) + "_" + str(result.get("month")) + "_" + str(result.get("day"))
     return jalalidate
+
 def get_ID():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     log_files = [
@@ -2097,6 +2113,7 @@ def get_ID():
             return " "
     else:
         return "sab"
+
 def output_name(ID, Date):
     return "smart" + "-"+ ID + "_" + Date + ".xlsx"
 #Change log name for old logs needs rework
@@ -2121,7 +2138,6 @@ def output_name(ID, Date):
                     print(f"Renamed: {old_log_path} -> {new_log_path}")
                 except OSError as e:
                     print(f"Error renaming {old_log_path}: {e}")
-
 
 def write_slot_info_sheet(writer, slot_data):
     wb = writer.book
@@ -2257,6 +2273,7 @@ def adjust_height(ws):
     for row in ws.iter_rows(min_row=2):
         for cell in row:
             ws.row_dimensions[cell.row].height = 80
+
 def about_info():
     about = []
     script_ver = os.path.basename(__file__)
@@ -2264,7 +2281,8 @@ def about_info():
         "Script Version" : script_ver
         })
     return about
-#This is for extracting columns from header
+
+#This is for extracting columns from header. gets header string and returns the column number
 def find_by_header(ws, header):
        # Get the search string in the appropriate case
     search_string = header

@@ -679,6 +679,91 @@ def parse_scst_to_dict(log_content):
                 unique_luns = sorted(set(luns), key=lambda x: int(x[0]))
                 unique_initiators = sorted(set(initiators))
 
+def extract_device_info(log_content, enclosure):
+    data = []
+    disk_blocks = re.findall(r"=== START OF INFORMATION SECTION ===(.*?)(?==== START OF INFORMATION SECTION ===|\Z)", log_content, re.DOTALL)
+    tmp_data = []
+    for block in disk_blocks:
+         serial_match = re.search(r"Serial Number:\s+(\S+)", block, re.IGNORECASE)
+         serial_number = serial_match.group(1) if serial_match else None
+
+         temp_match = re.search(r"Current Drive Temperature:\s+(\d+)", block)
+         hours_match = re.search(r"number of hours powered up\s+=\s+([\d.]+)", block)
+         #For Samsung SSDs
+         temp_match_sam = re.search(r"194\s+[\w_]+\s+[\w\d]+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+-\s+(\d+)", block)
+         if not temp_match_sam: temp_match_sam = re.search(r"190\s+[\w_]+\s+[\w\d]+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+-\s+(\d+)", block) 
+         hours_match_sam = re.search(r"9\s+[\w_]+\s+[\w\d]+\s+\d+\s+\d+\s+\d+\s+\w+\s+\w+\s+-\s+(\d+)", block)
+         tsw = "-"
+         tsw_ctl = "-"
+         hours = "-"
+         tsw_waf2 = "-"
+         tsw_waf4 = "-"
+         percent_life = "-"
+         slot = "-"
+         model = "-"
+         state = "-"
+         ss_media = "-"
+         if serial_number:
+             if temp_match:
+                 temperature = f"{temp_match.group(1)}"
+             else:
+                 temperature = "-"
+
+             for enc in enclosure:
+                 if serial_number == enc["Serial Number"]:
+                     interface = enc["Interface"]
+                     model = enc["Device Model"]
+                     if enc["Parameter"] == "Total Size Written (TB)":
+                         tsw = enc["Raw Value"]
+                         tsw_waf2 = float(tsw) * 2
+                         tsw_waf4 = float(tsw) * 4
+                     elif enc["Parameter"] == "Total Size Written (TB)-SSD_Ctl":
+                         tsw_ctl = enc["Raw Value"]
+                     if enc["Parameter"] == "Power_On_Hours":
+                         hours = enc["Raw Value"]
+                     if enc["Parameter"] == "Percent Life Time Remaining":
+                         percent_life = enc["Raw Value"]
+                     if enc["Parameter"] == "SS Media used endurance indicator %":
+                         ss_media = enc["Raw Value"]
+             if hours_match:
+                 hours = hours_match.group(1)
+             tmp_data.append({
+                "Interface": interface,
+                "Model": model,
+                "Serial Number": serial_number,
+                "Temp": temperature,
+                "Powered Up Hours": hours,
+                "TBW": tsw,
+                "TBW-WAF2": tsw_waf2,
+                "TBW-WAF4": tsw_waf4,
+                "TBW (Ctl)": tsw_ctl,
+                "Percent Life": percent_life,
+                "Endurance": ss_media
+                })
+
+         elif serial_number:
+             if temp_match_sam:
+                temperature = f"{temp_match_sam.group(1)}"
+             else:
+                temperature = "-"
+             if hours_match_sam:
+                 hours = hours_match_sam.group(1)
+             data.append({
+                 "Interface": interface,
+                 "Model": model,
+                 "Serial Number": serial_number,
+                 "Temp": temperature,
+                 "Powered Up Hours": hours,
+                 "TBW": tsw,
+                 "TBW-WAF2": tsw_waf2,
+                 "TBW-WAF4": tsw_waf4,
+                 "TBW (Ctl)": tsw_ctl,
+                 "Percent Life": percent_life,
+                 "Endurance": ss_media
+                 })
+
+    data.extend(tmp_data)
+    return data
 
         
 if __name__ == "__main__":
@@ -708,6 +793,8 @@ if __name__ == "__main__":
     ssd_data = extract_ssd_parameters(smarts_content)
     # Check if OS disks are present
     hdd_data = extract_hdd_parameters(smarts_content)
+    disk_data = ssd_data + hdd_data
+    device_info = extract_device_info(smarts_content, disk_data)
     with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
         # Write SMART data to first sheet
         df_smart = pd.DataFrame(ssd_data + hdd_data)
@@ -719,13 +806,15 @@ if __name__ == "__main__":
         
         # Write the DataFrame to the Excel file
         df_smart.to_excel(writer, sheet_name="SMART Data", index=False)
+        if device_info:
+            df_devinfo = pd.DataFrame(device_info)
+            df_devinfo.to_excel(writer, sheet_name="Device Info", index=False)
         if dmesg:
             df_dmesg = pd.DataFrame(dmesg)
             df_dmesg.to_excel(writer, sheet_name="dmesg log", index=False)
         if uilog:
             df_uilog = pd.DataFrame(uilog)
             df_uilog.to_excel(writer, sheet_name="sab-ui log", index=False)
-
     wb = load_workbook(excel_path)
     if "SMART Data" in wb.sheetnames:
         ws = wb["SMART Data"]
@@ -738,7 +827,98 @@ if __name__ == "__main__":
             adjust_column_widths(ws) # Adjust column widths for all sheets
             for cell in ws[1]:
                 cell.alignment = Alignment(wrap_text= True, horizontal='center')
-                
+        yellow_fill = PatternFill(start_color="ffffa6", end_color="FFFF00", fill_type="solid")
+        orange_fill = PatternFill(start_color="FFA500", end_color="FFFF00", fill_type="solid")
+        red_fill = PatternFill(start_color="de0a0a", end_color="FFFF00", fill_type="solid")
+        green_fill = PatternFill(start_color="bbe33d", end_color="FFFF00", fill_type="solid")
+        grey_fill = PatternFill(start_color="cccccc", end_color="FFFF00", fill_type="solid")
+        brown_fill = PatternFill(start_color="8d281e", end_color="FFFF00", fill_type="solid")
+
+            #Colour cells based on thresholds
+        if "SMART Data" in wb.sheetnames:
+            ws = wb["SMART Data"]
+
+            # Define column indices with safe defaults
+            max_cols = ws.max_column
+
+            # Column indices (0-based for row[x] access)
+            PARAM_COL = 5    # Column G
+            THRESHOLD_COL = 6  # Column H
+            VALUE_COL = 7     # Column I
+            RAW_VALUE_COL = 8  # Column J
+
+            for row in ws.iter_rows(min_row=2):  # Skip header row (row 1)
+                # Safely extract cells only if columns exist
+                try:
+                    param_value_cell = row[PARAM_COL] if PARAM_COL < len(row) else None
+                    threshold_cell = row[THRESHOLD_COL] if THRESHOLD_COL < len(row) else None
+                    value_cell = row[VALUE_COL] if VALUE_COL < len(row) else None
+                    raw_value_cell = row[RAW_VALUE_COL] if RAW_VALUE_COL < len(row) else None
+                except IndexError:
+                    continue  # Skip rows that don't have enough columns
+
+                param_str = param_value_cell.value if param_value_cell else None
+                threshold_str = threshold_cell.value if threshold_cell else None
+                value_str = value_cell.value if value_cell else None
+                raw_value_str = raw_value_cell.value if raw_value_cell else None
+
+                if not all([param_value_cell, threshold_cell, value_cell, raw_value_cell]):
+                    continue
+
+                # We don't want to color this cell
+                is_unused_rsvd = False
+                if param_str == "Unused_Rsvd_Blk_Cnt_Tot":
+                    is_unused_rsvd = True
+
+                # Skip rows with missing/invalid thresholds
+                if not threshold_str or threshold_str == "-":
+                    continue
+
+                try:
+                    threshold_value = float(threshold_str)
+                    threshold_caution = threshold_value * 1.5 if threshold_value != 0 else 30 
+                    threshold_warning = threshold_value * 1.2 if threshold_value != 0 else 20
+                except (ValueError, TypeError):
+                    continue  # Skip non-numeric thresholds
+
+                # Check Value or Raw Value
+                compare_value = None
+                if value_str not in (None, "-", ""):
+                    try:
+                        compare_value = float(value_str)
+                        # To avoid colouring cells when value is 100
+                        if compare_value == 100:
+                            compare_value = 200
+                    except (ValueError, TypeError):
+                        pass
+
+                if compare_value is None:  # Fallback to Raw Value
+                    if raw_value_str not in (None, "-", ""):
+                        try:
+                            # because here raw value is smaller than threshold in normal state
+                            threshold_caution = threshold_value * -0.8
+                            threshold_warning = threshold_value * -0.9
+                            compare_value = float(raw_value_str) * -1
+                            threshold_value = threshold_value * -1
+                        except (ValueError, TypeError):
+                            continue  # Skip invalid values
+                    else:
+                        continue
+
+                # Only color if we have the raw_value_cell and it's not unused_rsvd
+                if raw_value_cell and not is_unused_rsvd:
+                    # Highlight if value < threshold
+                    if compare_value <= threshold_value:
+                        raw_value_cell.fill = red_fill
+                    elif compare_value <= threshold_warning:
+                        raw_value_cell.fill = orange_fill
+                    elif compare_value <= threshold_caution:
+                        raw_value_cell.fill = yellow_fill
+
+                # Clear fill for unused_rsvd
+                if is_unused_rsvd and raw_value_cell:
+                    raw_value_cell.fill = PatternFill()
+
         wb.save(excel_path)
     print("SMART data, device info, and host info extracted and written to the Excel file with proper formatting.")
 
