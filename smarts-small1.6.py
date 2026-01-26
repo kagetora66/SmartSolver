@@ -20,7 +20,6 @@ from openpyxl.styles import Border, Side
 def merge_cells_for_column(ws, col_idx):
     prev_value = None
     start_row = 2  # Start from the second row (first row is headers)
-
     for row in range(2, ws.max_row + 1):
         current_value = ws.cell(row=row, column=col_idx).value
         if current_value == prev_value:
@@ -710,9 +709,15 @@ def extract_device_info(log_content, enclosure):
                  temperature = "-"
 
              for enc in enclosure:
-                 if serial_number == enc["Serial Number"]:
+                 if not enc.get("En/Slot"):
+                     enc["En/Slot"] = ""
+                 if not enc.get("Disk State"):
+                     enc["Disk State"] = ""
+                 if serial_number in enc["Serial Number"]:
                      interface = enc["Interface"]
+                     slot = enc["En/Slot"]
                      model = enc["Device Model"]
+                     state = enc["Disk State"]
                      if enc["Parameter"] == "Total Size Written (TB)":
                          tsw = enc["Raw Value"]
                          tsw_waf2 = float(tsw) * 2
@@ -728,6 +733,7 @@ def extract_device_info(log_content, enclosure):
              if hours_match:
                  hours = hours_match.group(1)
              tmp_data.append({
+                "Enc/Slot": slot,
                 "Interface": interface,
                 "Model": model,
                 "Serial Number": serial_number,
@@ -749,6 +755,7 @@ def extract_device_info(log_content, enclosure):
              if hours_match_sam:
                  hours = hours_match_sam.group(1)
              data.append({
+                 "Enc/Slot": slot,
                  "Interface": interface,
                  "Model": model,
                  "Serial Number": serial_number,
@@ -765,22 +772,155 @@ def extract_device_info(log_content, enclosure):
     data.extend(tmp_data)
     return data
 
+def extract_sysinfo():
+    
+    pmc_file = glob.glob(os.path.join(script_dir, "output.txt"))
+    sys_info = {}
+    if pmc_file:
+         # Extract versions from pmc output
+         print("System Info extracted from output.txt")
+         with open(pmc_file[0], "r") as file:
+             content = file.read()
+             basic_info = {
+                 "SAB ID": re.search(r'hostname\s*:\s*(.*)$', content, re.IGNORECASE | re.MULTILINE), 
+                 "SAB Ver": re.search(r'#SAB version\s+([^\s]+)', content),
+                 "Rep Ver": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
+                 "Rapid Ver": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
+                 "UI Ver": re.search(r'version\s*=\s*"([^"]+)"', content),
+                 "CLI Ver": re.search(r'CLI Version:\s*(.+)', content),
+                 "BBU": re.search(r'BBU Status =\s*([^\s]+)', content),
+                 "CC Status": re.search(r'CC is\s*(.+)', content),
+                 "RC Model": re.search(r'Model\s+=\s+(.+)', content),
+                 "FW Ver": re.search(r'Firmware Version\s+=\s(.+)', content)
+             }
+
+ # Function to extract enclosure/slot information
+def extract_enclosure_slot_info(log_content, serial_numbers):
+    enclosure_slot_data = {}
+
+    # Split the log content into lines
+    lines = log_content.splitlines()
+
+    current_shield_counter = None
+    current_media_error_count = None
+    current_other_error_count = None
+    predictive_failure_count = None
+    disk_status = None
+    for i, line in enumerate(lines):
+        line = line.strip()
+
+        # Capture Shield Counter
+        if line.startswith("Shield Counter"):
+            current_shield_counter = line.split(":")[1].strip()
+            if current_shield_counter == "0":
+                current_shield_counter = "-"
+
+        # Capture Media Error Count
+        elif line.startswith("Media Error Count"):
+            current_media_error_count = line.split(":")[1].strip()
+            if current_media_error_count == "0":
+                current_media_error_count = "-"
+
+
+        # Capture Other Error Count
+        elif line.startswith("Other Error Count"):
+            current_other_error_count = line.split(":")[1].strip()
+            if current_other_error_count == "0":
+                current_other_error_count = "-"
+
+        #Capture Predictive Failure Count
+        elif line.startswith("Predictive Failure Count"):
+            predictive_failure_count = line.split(":")[1].strip()
+            if predictive_failure_count == "0":
+               predictive_failure_count = "-"
+
+        #Capture disk state 
         
+        if " UGood " in line:
+            disk_status = "No Config"
+        elif "Online" in line:
+            disk_status = "Operational"
+        elif "Hotspare" in line:
+            disk_status = "Hotspare"
+        elif " UBad " in line:
+            disk_status = "BAD UNCONFIGURED"
+
+        serial_pattern = r'Inquiry Data:\s+([A-Z-0-9]+)\s+[A-Z-0-9]+\s+([A-Z-0-9]+)'
+        serial_match = re.search(serial_pattern, line)
+        serial = "-"
+        #Test
+        if line.startswith("Inquiry Data"):
+            serial_parts = line.split(" ")
+            if "SEAGATE" in serial_parts:
+                serial = serial_parts[-1].split("E003")[1]
+            elif "samsung" in list(map(str.lower, serial_parts)):
+                serial = serial_parts[2]
+            else:
+                #Micron
+                serial = serial_parts[10].split("Micron")[0]
+        #if serial_match:
+        #    if serial_match.group(1) == "SEAGATE":
+        #        serial = serial_match.group(2)
+        #        serial = serial.split("E003")[1]
+        #    else:
+        #        serial = serial_match.group(1)
+        # Detect Serial Number
+        for srl in serial_numbers:
+            if serial in srl:
+                # Search backward for Drive line
+                for j in range(i, max(i - 28, -1), -1):
+                    drive_line = lines[j].strip()
+                    enc_pattern = r'Enclosure Device ID:\s+([0-9]+)'
+                    slot_pattern = r'Slot Number:\s+([0-9]+)'
+                    enc_match = re.search(enc_pattern, drive_line)
+                    slot_match = re.search(slot_pattern, drive_line)
+                    if enc_match:
+                        enclosure = enc_match.group(1)
+                    if slot_match:
+                        slot = slot_match.group(1)
+                        # Now assign all gathered info
+                enclosure_slot_data[serial] = {
+                    "enclosure_slot": f"{enclosure}/{slot}",
+                    "shield_counter": current_shield_counter,
+                    "media_error_count": current_media_error_count,
+                    "other_error_count": current_other_error_count,
+                    "predictive_failure_count": predictive_failure_count,
+                    "Disk State": disk_status
+                }
+    return enclosure_slot_data
+
+def about_info():
+    about = []
+    script_ver = os.path.basename(__file__)
+    about.append({
+        "Script Version" : script_ver
+        })
+    return about
+
+def reorder_columns(data):
+    return [{"En/Slot": disk.get("En/Slot", "N/A"), **disk} for disk in data]
 if __name__ == "__main__":
     #Extract files
+    about = about_info()
     script_dir = os.path.dirname(os.path.abspath(__file__))
     excel_path = "smarts.xlsx"
     dmesg_path =  os.path.join(script_dir, "dmesg.out")
     dmesg = ""
     uilog = ""
     scst_file = "scstfiledetail"
-#    groups_list = parse_scst_to_dict(scst_file)
+    storcli_file_path = os.path.join(script_dir, "pdlist.out")
+    with open(storcli_file_path, "r", encoding="utf-8", errors="ignore") as file:
+        storcli_content = file.read()
+
     if os.path.isfile(dmesg_path):
         dmesg = log_extract(dmesg_path)
     uilog_path =  os.path.join(script_dir, "sab-ui.out")
     if os.path.isfile(uilog_path):
         uilog = log_extract(uilog_path)
 
+    # Extract General Device Info
+    sys_info = extract_sysinfo()
+    
     smarts_file_path = os.path.join(script_dir, "smarts.txt")
         # Read the log files
     try:
@@ -793,6 +933,27 @@ if __name__ == "__main__":
     ssd_data = extract_ssd_parameters(smarts_content)
     # Check if OS disks are present
     hdd_data = extract_hdd_parameters(smarts_content)
+    enclosure_slot_data = []
+    serial_numbers = set([disk["Serial Number"] for disk in ssd_data + hdd_data if disk["Serial Number"] != "Unknown"])
+    enclosure_slot_data = extract_enclosure_slot_info(storcli_content, serial_numbers)
+    for disk in ssd_data + hdd_data:
+        #Default value to avoid "N/A in excel"
+        disk["En/Slot"] = ""
+        for enc in enclosure_slot_data:
+            if enc in disk["Serial Number"]:
+                disk["Disk State"] = enclosure_slot_data[enc]["Disk State"]
+                disk["Media Err"] = enclosure_slot_data[enc]["media_error_count"]
+                disk["Other Err"] = enclosure_slot_data[enc]["other_error_count"]        
+                disk["Shield Cnt"] = enclosure_slot_data[enc]["shield_counter"]
+                disk["Predictive Failure"] = enclosure_slot_data[enc]["predictive_failure_count"]
+                disk["En/Slot"] = enclosure_slot_data[enc]["enclosure_slot"]
+
+    ssd_data = reorder_columns(ssd_data)
+    hdd_data = reorder_columns(hdd_data)
+    #OS Disk not found therefore we extract from pmc output
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    pmc_files = glob.glob(os.path.join(script_dir, "output.txt"))
+
     disk_data = ssd_data + hdd_data
     device_info = extract_device_info(smarts_content, disk_data)
     with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
@@ -803,7 +964,6 @@ if __name__ == "__main__":
         # Replace empty strings with NaN (optional, but helps with consistency)
         df_smart.replace("", pd.NA, inplace=True)
 
-        
         # Write the DataFrame to the Excel file
         df_smart.to_excel(writer, sheet_name="SMART Data", index=False)
         if device_info:
@@ -815,15 +975,22 @@ if __name__ == "__main__":
         if uilog:
             df_uilog = pd.DataFrame(uilog)
             df_uilog.to_excel(writer, sheet_name="sab-ui log", index=False)
+        if sys_info:
+            df_host = pd.DataFrame(sys_info)
+            df_host.to_excel(writer, sheet_name="General System Info", index=False)
+        if about:
+            df_about = pd.DataFrame(about)
+            df_about.to_excel(writer, sheet_name="About", index=False)
     wb = load_workbook(excel_path)
     if "SMART Data" in wb.sheetnames:
         ws = wb["SMART Data"]
         for sheet_name in wb.sheetnames:
-            ws = wb[sheet_name]
-            for column in range(1,7):
-                merge_cells_for_column(ws, column)
-            for column in range(11,16):
-                merge_cells_for_column(ws, column)
+            if sheet_name != "Device Info":
+                ws = wb[sheet_name]
+                for column in range(1,7):
+                    merge_cells_for_column(ws, column)
+                for column in range(11,16):
+                    merge_cells_for_column(ws, column)
             adjust_column_widths(ws) # Adjust column widths for all sheets
             for cell in ws[1]:
                 cell.alignment = Alignment(wrap_text= True, horizontal='center')
@@ -833,7 +1000,7 @@ if __name__ == "__main__":
         green_fill = PatternFill(start_color="bbe33d", end_color="FFFF00", fill_type="solid")
         grey_fill = PatternFill(start_color="cccccc", end_color="FFFF00", fill_type="solid")
         brown_fill = PatternFill(start_color="8d281e", end_color="FFFF00", fill_type="solid")
-
+        deep_blue_fill = PatternFill(start_color="b8cbdf", end_color="b8cbdf", fill_type="solid")
             #Colour cells based on thresholds
         if "SMART Data" in wb.sheetnames:
             ws = wb["SMART Data"]
@@ -842,10 +1009,14 @@ if __name__ == "__main__":
             max_cols = ws.max_column
 
             # Column indices (0-based for row[x] access)
-            PARAM_COL = 5    # Column G
-            THRESHOLD_COL = 6  # Column H
-            VALUE_COL = 7     # Column I
-            RAW_VALUE_COL = 8  # Column J
+            #It's better to avoid hard-coding column numbers TODO
+            PARAM_COL = 6    # Column G
+            THRESHOLD_COL = 7  # Column H
+            VALUE_COL = 8     # Column I
+            RAW_VALUE_COL = 9  # Column J
+            OTHER_ERROR_COL = 12  # Column M
+            SHIELD_CNT_COL = 13   # Column N
+            PREDICT_FAIL_COL = 14  # Column O
 
             for row in ws.iter_rows(min_row=2):  # Skip header row (row 1)
                 # Safely extract cells only if columns exist
@@ -854,6 +1025,10 @@ if __name__ == "__main__":
                     threshold_cell = row[THRESHOLD_COL] if THRESHOLD_COL < len(row) else None
                     value_cell = row[VALUE_COL] if VALUE_COL < len(row) else None
                     raw_value_cell = row[RAW_VALUE_COL] if RAW_VALUE_COL < len(row) else None
+                    # Optional columns - only process if they exist
+                    other_error_cell = row[OTHER_ERROR_COL] if OTHER_ERROR_COL < len(row) else None
+                    shield_cnt_cell = row[SHIELD_CNT_COL] if SHIELD_CNT_COL < len(row) else None
+                    predict_fail_cell = row[PREDICT_FAIL_COL] if PREDICT_FAIL_COL < len(row) else None
                 except IndexError:
                     continue  # Skip rows that don't have enough columns
 
@@ -861,6 +1036,32 @@ if __name__ == "__main__":
                 threshold_str = threshold_cell.value if threshold_cell else None
                 value_str = value_cell.value if value_cell else None
                 raw_value_str = raw_value_cell.value if raw_value_cell else None
+                if other_error_cell:
+                    other_error_str = other_error_cell.value
+                    if other_error_str not in (None, '-', ''):
+                        try:
+                            other_error_value = int(other_error_str)
+                            if 10 < other_error_value < 35:
+                                other_error_cell.fill = yellow_fill
+                            elif 36 < other_error_value < 70:
+                                other_error_cell.fill = orange_fill
+                            elif 70 < other_error_value < 100:
+                                other_error_cell.fill = red_fill
+                            elif other_error_value > 100:
+                                other_error_cell.fill = brown_fill
+                        except (ValueError, TypeError):
+                            pass  # Silently handle conversion errors
+
+                if shield_cnt_cell:
+                    shield_cnt_str = shield_cnt_cell.value
+                    if shield_cnt_str not in (None, '-', ''):
+                        shield_cnt_cell.fill = red_fill
+
+                if predict_fail_cell:
+                    predict_fail_str = predict_fail_cell.value
+                    if predict_fail_str not in (None, '-', ''):
+                        predict_fail_cell.fill = red_fill
+
 
                 if not all([param_value_cell, threshold_cell, value_cell, raw_value_cell]):
                     continue
@@ -915,11 +1116,10 @@ if __name__ == "__main__":
                     elif compare_value <= threshold_caution:
                         raw_value_cell.fill = yellow_fill
 
-                # Clear fill for unused_rsvd
-                if is_unused_rsvd and raw_value_cell:
-                    raw_value_cell.fill = PatternFill()
-
+                for sheet_name in wb.sheetnames:
+                    ws = wb[sheet_name]
+                    #Color the first row of sheets
+                    for cell in ws[1]:# First row
+                        cell.fill = deep_blue_fill
         wb.save(excel_path)
     print("SMART data, device info, and host info extracted and written to the Excel file with proper formatting.")
-
-   

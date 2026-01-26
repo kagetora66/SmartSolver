@@ -1934,7 +1934,14 @@ def pool_info():
                     raids["LUN Name"] = "OS"
                     raids["LUN Size"] = "n/a"
                     raid_merge.append(raids)
-                   
+        #Adding Pools that have "-" for LUN to raid_merge
+        for raids in pool_data:
+            is_there = False
+            for raid in raid_merge:
+                if raid["Pool Name"] == raids["Pool Name"]:
+                    is_there = True
+            if not is_there:
+                raid_merge.append(raids)
     #Add front end name for pools from database
     for raids in raid_merge if disk_blocks else pool_data:
         db_dir = "./Database"
@@ -2326,8 +2333,8 @@ if __name__ == "__main__":
     year, month, day = parse_date(log_date)
     jalalidate = convertdate(year, month, day)
     ID = get_ID()
-    if ID == " " or ID == "sab":
-        ID= input("Please enter Name+ID for the product\n")
+#    if ID == " " or ID == "sab":
+#        ID= input("Please enter Name+ID for the product\n")
     chassischart = chassis_chart()
     # Read the log files
     try:
@@ -2436,12 +2443,12 @@ if __name__ == "__main__":
             df_device.to_excel(writer, sheet_name="Device Info", index=False)
         if pool_data:
             df_host = pd.DataFrame(pool_data)
-            if not df_host['LUN Name'].eq("-").all():
-                df_host['LUN Name'] = df_host['LUN Name'].astype('string')
-                unique_df = df_host.drop_duplicates(subset = ["LUN Name"])
-                unique_df.to_excel(writer, sheet_name="Pool Data", index=False)
-            else:
-                df_host.to_excel(writer, sheet_name="Pool Data", index=False)
+            #if not df_host['LUN Name'].eq("-").all():
+            #    df_host['LUN Name'] = df_host['LUN Name'].astype('string')
+            #    unique_df = df_host.drop_duplicates(subset = ["LUN Name"])
+            #    unique_df.to_excel(writer, sheet_name="Pool Data", index=False)
+            #else:
+            df_host.to_excel(writer, sheet_name="Pool Data", index=False)
                 
         # Write host information to the third sheet (only if non-empty)
         if host_data:
@@ -2699,6 +2706,7 @@ if __name__ == "__main__":
                             percent_life_cell.fill = red_fill
                         if percent_life > LOW_THRESHOLD_PLIFE:
                             percent_life_cell.fill = yellow_fill
+            #Here we color cells if voltage and current are not standard values
             if "General System Info" in wb.sheetnames:
                 ws = wb["General System Info"]
                 CURRENT_HIGH_THRESHOLD = 2.0
@@ -2756,7 +2764,7 @@ if __name__ == "__main__":
                             cv_cell.fill = red_fill
                             
                         
-                
+            #Here we color cells for pools that do not have a dedicated hotspare 
             if "Pool Data" in wb.sheetnames:
                 ws = wb["Pool Data"]
                 HOTSPARE_COL = 13
