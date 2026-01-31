@@ -33,7 +33,6 @@ def merge_cells_for_column(ws, col_idx):
     if prev_value is not None and start_row is not None:
         ws.merge_cells(start_row=start_row, start_column=col_idx, end_row=ws.max_row, end_column=col_idx)
         ws.cell(start_row, col_idx).alignment = Alignment(vertical="center", horizontal="center")
-
 def adjust_column_widths(ws):
     for col in ws.columns:
         max_length = max((len(str(cell.value)) for cell in col if cell.value), default=10)
@@ -44,8 +43,7 @@ def adjust_column_widths(ws):
             ws.column_dimensions[col_letter].width = 70
             for column in ws.iter_cols():
                 for cell in column:
-                    cell.alignment = Alignment(wrap_text=True, vertical='center')
-            
+                    cell.alignment = Alignment(wrap_text=True, vertical='center') 
 def adjust_height(ws):
     for row in ws.iter_rows(min_row=2):
         for cell in row:
@@ -787,12 +785,18 @@ def extract_sysinfo():
                  "Rep Ver": re.search(r'REPLICATION VERSION:\s*VERSION=([^\s]+)', content, re.IGNORECASE),
                  "Rapid Ver": re.search(r'Rapidtier Version:\s*([^\s]+)', content),
                  "UI Ver": re.search(r'version\s*=\s*"([^"]+)"', content),
-                 "CLI Ver": re.search(r'CLI Version:\s*(.+)', content),
+                 "CLI Ver": re.search(r'CLI Version:\n(.+)', content),
                  "BBU": re.search(r'BBU Status =\s*([^\s]+)', content),
                  "CC Status": re.search(r'CC is\s*(.+)', content),
                  "RC Model": re.search(r'Model\s+=\s+(.+)', content),
                  "FW Ver": re.search(r'Firmware Version\s+=\s(.+)', content)
              }
+    for name, match in basic_info.items():
+        if match:
+            sys_info[name] = match.group(1)
+        else:
+            sys_info[name] = "Not Found"
+    return [sys_info]
 
  # Function to extract enclosure/slot information
 def extract_enclosure_slot_info(log_content, serial_numbers):
@@ -899,6 +903,191 @@ def about_info():
 
 def reorder_columns(data):
     return [{"En/Slot": disk.get("En/Slot", "N/A"), **disk} for disk in data]
+
+#Extract slot number
+def extract_slot_port_info():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    pmc_files = glob.glob(os.path.join(script_dir, "output.txt"))
+
+    if pmc_files:
+        print("output.txt used in extracting slot info")
+        with open(pmc_files[0], "r") as f:
+            log = f.read()
+
+        slot_data = defaultdict(lambda: {
+            'enabled_ports': [],
+            'total_ports': 0,
+            'port_type': '',
+            'ports': {}
+        })
+    
+        current_slot = None
+        current_type = None
+        current_port = None
+
+        for line in log.splitlines():
+            line = line.strip()
+
+            # Detect slot type
+            if "--------ISCSI CARDS SLOTS" in line:
+                current_type = 'iscsi'
+            elif "--------FC HBA CARDS SLOTS" in line:
+                current_type = 'fc'
+
+            # Match slot/port headers
+            match = re.search(r'(NIC|FC) CARD in SLOT\s+(\d+)\s+PORT\s+(\d+)(?:\s+\([^)]+\))?', line)
+            if match:
+                current_slot = match.group(2)
+                current_port = int(match.group(3))
+                slot_info = slot_data[current_slot]
+                slot_info['port_type'] = current_type
+                slot_info['total_ports'] += 1
+                slot_info['ports'][current_port] = {
+                    'wwn': '',
+                    'connection_type': '-',
+                    'speed': '-'
+                }
+                continue
+
+            # FC ports
+            if current_type == 'fc':
+                if line.startswith("port_speed"):
+                    speed = line.split("=", 1)[1].strip()
+                    slot_data[current_slot]['ports'][current_port]['speed'] = speed if "Unknown" not in speed else "-"
+                elif line.startswith("wwn ="):
+                    wwn = line.split("=", 1)[1].strip().lower().replace("0x", "")
+                    wwn_formatted = ":".join(wwn[i:i+2] for i in range(0, len(wwn), 2))
+                    slot_data[current_slot]['ports'][current_port]['wwn'] = wwn_formatted
+                elif line.startswith("port_type"):
+                    port_type = line.split("=", 1)[1].strip()
+                    if "NPort" in port_type:
+                        slot_data[current_slot]['ports'][current_port]['connection_type'] = "SAN-Switch"
+                    elif "LPort" in port_type:
+                        slot_data[current_slot]['ports'][current_port]['connection_type'] = "LPort (private loop)"
+                    elif "Point" in port_type:
+                        slot_data[current_slot]['ports'][current_port]['connection_type'] = "Point-to-Point"
+
+            # iSCSI ports
+            elif current_type == 'iscsi':
+                if line.startswith("speed_interface"):
+                    speed = line.split("=", 1)[1].strip()
+                    slot_data[current_slot]['ports'][current_port]['speed'] = speed if "Unknown" not in speed else "-"
+                elif line.startswith("mac_address"):
+                    mac = line.split("=", 1)[1].strip()
+                    slot_data[current_slot]['ports'][current_port]['mac_address'] = mac
+                elif line.startswith("iqn."):
+                    iqn = line.strip()
+                    slot_data[current_slot]['ports'][current_port]['wwn'] = iqn
+        result = []
+        for slot, info in slot_data.items():
+            result.append({
+                'slot': f"Slot{slot}",
+                'port_type': info['port_type'],
+                'total_ports': info['total_ports'],
+                'ports': info['ports']
+            })
+
+        return result
+
+def write_slot_info_sheet(writer, slot_data):
+    wb = writer.book
+    ws = wb.create_sheet("Slot Info")
+    grey_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")     # Light grey
+    green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")   # Light green for FC
+    blue_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")     # Light blue for iSCSI
+
+    slots_order = [str(i) for i in range(6, 0, -1)]  # Slots 6 to 1
+    attributes = ["Port", "WWN", "Connection Type", "Speed"]
+    cols_per_slot = len(attributes)
+
+    # Prepare a dict for quick access
+    slot_map = {slot['slot']: slot for slot in slot_data}
+
+    # Write first row: slot header merged across cols_per_slot columns
+    for i, slot_num in enumerate(slots_order):
+        start_col = i * cols_per_slot + 1
+        end_col = start_col + cols_per_slot - 1
+        cell = ws.cell(row=1, column=start_col)
+        cell.value = f"Slot{slot_num}"
+        ws.merge_cells(start_row=1, start_column=start_col, end_row=1, end_column=end_col)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Apply light grey fill if the slot has data
+        slot = slot_map.get(f"Slot{slot_num}")
+        if slot and slot['total_ports'] > 0:
+            for col in range(start_col, end_col + 1):
+                ws.cell(row=1, column=col).fill = grey_fill
+    # Write second row: port type merged across same columns, empty if missing slot
+    for i, slot_num in enumerate(slots_order):
+        slot_key = f"Slot{slot_num}"
+        slot = slot_map.get(slot_key)
+        start_col = i * cols_per_slot + 1
+        end_col = start_col + cols_per_slot - 1
+        ws.merge_cells(start_row=2, start_column=start_col, end_row=2, end_column=end_col)
+        cell = ws.cell(row=2, column=start_col)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        
+        if slot is None or not slot.get('port_type'):
+            cell.value = ""
+        else:
+            cell.value = slot['port_type'].upper()
+            # Fill color by port type
+            fill = green_fill if slot['port_type'].lower() == "fc" else blue_fill
+            for col in range(start_col, end_col + 1):
+                ws.cell(row=2, column=col).fill = fill        
+    # Write third row: attribute headers
+    for i, slot_num in enumerate(slots_order):
+        slot_key = f"Slot{slot_num}"
+        slot = slot_map.get(slot_key)
+        start_col = i * cols_per_slot + 1
+
+        if slot is None or slot['total_ports'] == 0:
+            for j in range(cols_per_slot):
+                ws.cell(row=3, column=start_col + j).value = ""
+        else:
+            for j, attr in enumerate(attributes):
+                label = attr
+                if attr == "Connection Type" and slot and slot.get('port_type', '').lower() == 'iscsi':
+                    label = "MAC Address"
+                ws.cell(row=3, column=start_col + j).value = label    # Determine max number of rows needed
+    max_ports = max((slot['total_ports'] for slot in slot_map.values()), default=0)
+
+    # Write port data (row 4 onward)
+    for row_idx in range(max_ports):
+        for i, slot_num in enumerate(slots_order):
+            slot_key = f"Slot{slot_num}"
+            slot = slot_map.get(slot_key)
+            start_col = i * cols_per_slot + 1
+
+            if slot is None or row_idx >= slot['total_ports']:
+                for offset in range(cols_per_slot):
+                    ws.cell(row=4 + row_idx, column=start_col + offset).value = ""
+                continue
+
+            port_info = slot['ports'].get(row_idx, {})
+            port = row_idx
+            wwn = port_info.get('wwn', '')
+
+            # Use MAC address instead of connection type for iSCSI
+            if slot.get('port_type', '').lower() == 'iscsi':
+                connection = port_info.get('mac_address') or port_info.get('mac') or "-"
+            else:
+                connection = port_info.get('connection_type', '-')  # FC fallback
+
+            speed = port_info.get('speed', '-')
+            if not speed or speed.lower() == "unknown":
+                speed = "-"
+
+            # Write to sheet
+            ws.cell(row=4 + row_idx, column=start_col).value = port
+            ws.cell(row=4 + row_idx, column=start_col + 1).value = wwn
+            ws.cell(row=4 + row_idx, column=start_col + 2).value = connection
+            ws.cell(row=4 + row_idx, column=start_col + 3).value = speed
+
+    # Adjust column widths
+    for col in range(1, cols_per_slot * len(slots_order) + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 20
+
 if __name__ == "__main__":
     #Extract files
     about = about_info()
@@ -936,6 +1125,7 @@ if __name__ == "__main__":
     enclosure_slot_data = []
     serial_numbers = set([disk["Serial Number"] for disk in ssd_data + hdd_data if disk["Serial Number"] != "Unknown"])
     enclosure_slot_data = extract_enclosure_slot_info(storcli_content, serial_numbers)
+    slot_info = extract_slot_port_info()
     for disk in ssd_data + hdd_data:
         #Default value to avoid "N/A in excel"
         disk["En/Slot"] = ""
@@ -969,15 +1159,17 @@ if __name__ == "__main__":
         if device_info:
             df_devinfo = pd.DataFrame(device_info)
             df_devinfo.to_excel(writer, sheet_name="Device Info", index=False)
+        if sys_info:
+            df_host = pd.DataFrame(sys_info)
+            df_host.to_excel(writer, sheet_name="General System Info", index=False)
+        if slot_info:
+            write_slot_info_sheet(writer, slot_info)
         if dmesg:
             df_dmesg = pd.DataFrame(dmesg)
             df_dmesg.to_excel(writer, sheet_name="dmesg log", index=False)
         if uilog:
             df_uilog = pd.DataFrame(uilog)
             df_uilog.to_excel(writer, sheet_name="sab-ui log", index=False)
-        if sys_info:
-            df_host = pd.DataFrame(sys_info)
-            df_host.to_excel(writer, sheet_name="General System Info", index=False)
         if about:
             df_about = pd.DataFrame(about)
             df_about.to_excel(writer, sheet_name="About", index=False)
@@ -985,7 +1177,7 @@ if __name__ == "__main__":
     if "SMART Data" in wb.sheetnames:
         ws = wb["SMART Data"]
         for sheet_name in wb.sheetnames:
-            if sheet_name != "Device Info":
+            if sheet_name != "Device Info" and sheet_name != "Slot Info":
                 ws = wb[sheet_name]
                 for column in range(1,7):
                     merge_cells_for_column(ws, column)

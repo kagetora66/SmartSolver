@@ -2651,9 +2651,9 @@ if __name__ == "__main__":
                             cell.fill = yellow_fill
             if "dmesg log" in wb.sheetnames:
                 ws = wb["dmesg log"]
-                red_keywords = {"error", "failure", "unexpected", "unstable", "failed", "fail"}
-                yellow_keywords = {"loop down", "warning", "time out", "timeout", "abort_task", "task abort", "unplugged"}
-                brown_keywords = {"fatal", "emergency", "crash"}
+                red_keywords = {"error", "failure", "unexpected", "unstable", "failed", "fail", "dump", "exception", "panic", "freeze", "fault"}
+                yellow_keywords = {"loop down", "warning", "time out", "timeout", "abort_task", "task abort", "unplugged", "bug", "exit", "halt"}
+                brown_keywords = {"fatal", "emergency", "crash", "race", "deadlock", "livelock", "critical", "alert", "hang"}
                 adjust_height(ws)
                 for row in ws.iter_rows(min_row=1):
                     for cell in row:
