@@ -1692,7 +1692,7 @@ def chassis_chart():
             results = [
                 {
                     'encID': int(enc_id),
-                    'Position': "Front" if values[0] == "Port 0 - 3" else "Back",
+                    'Position': "Front" if values[0] == "Port 0 - 3" or values[0] == "C.0" else "Back",
                     'Chassis Type': "DPE" if str(values[1]) == "1" else "DAE1" if str(values[1]) == "2" else "DAE2" if str(values[1]) == "3" else "DPE",
                     'sort_key': int(values[1])  # Keep original for sorting
                 }

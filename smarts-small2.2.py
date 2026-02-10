@@ -872,7 +872,7 @@ def extract_enclosure_slot_info(log_content, serial_numbers):
         for srl in serial_numbers:
             if serial in srl:
                 # Search backward for Drive line
-                for j in range(i, max(i - 28, -1), -1):
+                for j in range(i, max(i - 29, -1), -1):
                     drive_line = lines[j].strip()
                     enc_pattern = r'Enclosure Device ID:\s+([0-9]+)'
                     slot_pattern = r'Slot Number:\s+([0-9]+)'
@@ -988,6 +988,291 @@ def extract_slot_port_info():
             })
 
         return result
+# Function to extract host information from SCST configuration
+def extract_host_info():
+    scst_dir = "./"
+    db_dir = "./"
+    # Checks for new scst file inside script directory
+    new_scst_matches = glob.glob(os.path.join(script_dir, "scst.*"))
+    if new_scst_matches:
+        scst_files = new_scst_matches[0]
+        input_file = scst_files
+    else:
+        scst_files = sorted(glob.glob(os.path.join(scst_dir, "scst.conf")), reverse=True)
+        input_file = scst_files[0] if scst_files else None
+    
+    if not input_file:
+        print("Error: No 'scst_*.conf' files found in directory.")
+        return []
+
+    # Checks for output.txt file inside script directory 
+    target_port_type = {}
+    is_pmc = os.path.isfile(os.path.join(os.path.dirname(__file__), 'output.txt'))
+    if is_pmc:
+        pmc_output = "output.txt"
+        current_wwn = None
+        print("output.txt used in extracting host info")
+        with open(pmc_output, "r") as file:
+            lines = file.readlines()
+        # We map port connection to wwn addresses 
+        for line in lines:
+            line = line.strip()
+            if line.lower().startswith("wwn = 0x"):
+                hex_str = line.split('=')[1].strip().lower().replace('0x', '')
+                current_wwn = ':'.join(hex_str[i:i+2] for i in range(0, len(hex_str), 2))
+            elif 'Point' in line and current_wwn:
+                port_type = "Point to Point"
+                target_port_type[current_wwn] = port_type
+                current_wwn = None
+            elif 'NPort' in line and current_wwn:
+                port_type = "SAN Switch"
+                target_port_type[current_wwn] = port_type
+                current_wwn = None
+            elif 'LPort' in line and current_wwn:
+                port_type = "LPort (private loop)"
+                target_port_type[current_wwn] = port_type
+                current_wwn = None
+                
+    else:
+        systemstat_dir = os.path.join(script_dir, "Logs")
+        systemstat_file = sorted(glob.glob(os.path.join(systemstat_dir, "system_status_20*.txt")), reverse=True)
+        input_sys = systemstat_file[0] if systemstat_file else None
+        if input_sys:
+            with open(input_sys, 'r') as f:
+                content = f.read()
+                if content.strip(): 
+                    data = json.loads(content)
+                    fc_data = data.get('SAB', {}).get('fc_cards', {})
+                    for card in fc_data:
+                        fc_ports = card.get('fc_port', [])
+                        for port in fc_ports:
+                            wwn = port.get('wwn')
+                            port_type = port.get('type')
+                            if 'NPort' in port_type:
+                                port_type = "SAN Switch(system_status)"
+                            elif 'Point' in port_type:
+                                port_type = "Point to Point(system_status)"
+                            if wwn and port_type:
+                                target_port_type[wwn] = port_type.strip()  # .strip() to remove newlines
+    try:
+        with open(input_file, "r") as file:
+            lines = file.readlines()
+
+        target_blocks = []
+        current_target = None
+        brace_count = 0
+
+        # Manually parse TARGET blocks
+        for line in lines:
+            target_match = re.match(r"\s*TARGET\s+(.+)\s*\{", line)
+            if target_match:
+                if current_target:
+                    print("[WARNING] Nested TARGET found, skipping previous unfinished block.")
+                current_target = {
+                    "address": target_match.group(1),
+                    "content": [line]
+                }
+                brace_count = 1
+                continue
+
+            if current_target:
+                current_target["content"].append(line)
+                brace_count += line.count("{")
+                brace_count -= line.count("}")
+                if brace_count == 0:
+                    # Complete block
+                    target_blocks.append((current_target["address"], "".join(current_target["content"])))
+                    current_target = None
+
+        host_data = []
+
+        for target_address, target_body in target_blocks:
+            groups = re.findall(r"GROUP\s+([\w-]+)\s*\{([\s\S]*?)\}", target_body)
+
+            for group_name, group_content in groups:
+                # Handle empty Access Control
+                access_control = group_name if group_name else "-"
+                
+                luns = re.findall(r"LUN\s+(\d+)\s+([\w_]+)", group_content)
+                initiators = re.findall(r"INITIATOR\s+(.+)", group_content)
+
+                unique_luns = sorted(set(luns), key=lambda x: int(x[0]))
+                unique_initiators = sorted(set(initiators))
+
+                sab_db_file = os.path.join(db_dir, "sab.db")
+                host_map = {}
+                lun_name_map = {}  # Dictionary to map backend LUN names to frontend names
+                if os.path.exists(sab_db_file):
+                    with sqlite3.connect(sab_db_file) as conn:
+                        cursor = conn.cursor()
+                        for initiator in unique_initiators:
+                            cursor.execute("""
+                                SELECT initiator_name, to_host_id 
+                                FROM hostinitiators
+                                WHERE initiator_name = ?
+                            """, (initiator,))
+                            to_host_row = cursor.fetchone()
+
+                            if to_host_row:
+                                to_host_id = to_host_row[1]
+                                cursor.execute("""
+                                    SELECT NAME 
+                                    FROM host
+                                    WHERE ID = ?
+                                """, (to_host_id,))
+                                host_row = cursor.fetchone()
+                                host_map[initiator] = host_row[0] if host_row else "Not Found"
+                            else:
+                                host_map[initiator] = "Not Found"
+                        for lunid, lun_be_name in unique_luns:
+                            cursor.execute(
+                                'SELECT "fe_name" FROM lun_name_mapper WHERE "be_name" = ?',
+                                (lun_be_name,)
+                            )
+                            lun_fe_row = cursor.fetchone()
+                            if lun_fe_row:
+                                lun_name_map[lun_be_name] = lun_fe_row[0]
+                            else:
+                                lun_name_map[lun_be_name] = lun_be_name
+                else:
+                    print("SAB DB not found")
+                    return []
+
+                # Group initiators and LUNs by host
+                host_luns_initiators = {}
+                for initiator, host_name in host_map.items():
+                    if host_name not in host_luns_initiators:
+                        host_luns_initiators[host_name] = {
+                            "luns": set(),
+                            "initiators": [],
+                            "target_map": {}
+                        }
+                    host_luns_initiators[host_name]["luns"].update(
+                        [lun[1] for lun in unique_luns if lun[1] != "device_null"]
+                    )
+            # Add LUNs with frontend names if available
+                    for lun_id, lun_be_name in unique_luns:
+                        if lun_be_name != "device_null":
+                            lun_fe_name = lun_name_map.get(lun_be_name, lun_be_name)
+                            host_luns_initiators[host_name]["luns"].add(lun_fe_name)
+                            if lun_be_name != lun_fe_name:
+                                host_luns_initiators[host_name]["luns"].remove(lun_be_name)
+
+                    host_luns_initiators[host_name]["initiators"].append(initiator)
+                    host_luns_initiators[host_name]["target_map"][initiator] = target_address
+                for host_name, data in host_luns_initiators.items():
+                    host_name = host_name if host_name else "-"
+                    for initiator in sorted(data["initiators"]):
+                        initiator = initiator if initiator else "-"
+                        target = data["target_map"].get(initiator, "-")
+                        port_type = target_port_type.get(target.strip(), "na") if target_port_type else "-"
+                        
+                        if not data["luns"]:
+                            host_data.append({
+                                "Access Control": access_control,
+                                "Host": host_name,
+                                "LUNs": "-",
+                                "Initiator Addresses": initiator,
+                                "Target Address": target,
+                                "Connection Type": port_type
+                            })
+                        else:
+                            for lun in sorted(data["luns"]):
+                                host_data.append({
+                                    "Access Control": access_control,
+                                    "Host": host_name,
+                                    "LUNs": lun,
+                                    "Initiator Addresses": initiator,
+                                    "Target Address": target,
+                                    "Connection Type": port_type
+                                })
+
+        if not host_data:
+            if target_port_type:
+                for target, port_type in target_port_type.items():
+                    host_data.append({
+                        "Access Control": "-",
+                        "Host": "-",
+                        "LUNs": "-",
+                        "Initiator Addresses": "-",
+                        "Target Address": target,
+                        "Connection Type": port_type
+                    })
+            else:
+                host_data.append({
+                    "Access Control": "-",
+                    "Host": "-",
+                    "LUNs": "-",
+                    "Initiator Addresses": "-",
+                    "Target Address": "-",
+                    "Connection Type": "-"
+                })
+
+        # Remove duplicates and group by all keys except "Target Address"
+        def get_group_key(d):
+            return tuple((k, v) for k, v in d.items() if k not in ["Target Address", "Initiator Addresses"])
+        
+        grouped = defaultdict(lambda: {
+            "Target Address": set(),  # Using set to avoid duplicates
+            "Initiator Addresses": set(),
+            "original_keys": None
+        })
+        
+        # First pass: collect unique addresses and remember key order
+        for item in host_data:
+            key = get_group_key(item)
+            group = grouped[key]
+            
+            if group["original_keys"] is None:
+                group["original_keys"] = list(item.keys())
+            
+            if "Target Address" in item:
+                group["Target Address"].add(item["Target Address"])
+            if "Initiator Addresses" in item:
+                group["Initiator Addresses"].add(item["Initiator Addresses"])
+        
+        # Second pass: build merged dictionaries
+        merged = []
+        for key, data in grouped.items():
+            new_dict = dict(key)
+            original_keys = data["original_keys"]
+            
+            # Insert addresses in original key order
+            if original_keys:
+                last_key = original_keys[-1]
+                last_value = new_dict.pop(last_key)
+                
+                if data["Target Address"]:
+                    new_dict["Target Address"] = "__ ".join(sorted(data["Target Address"]))
+                if data["Initiator Addresses"]:
+                    new_dict["Initiator Addresses"] = "__ ".join(sorted(data["Initiator Addresses"]))
+                
+                new_dict[last_key] = last_value
+            else:
+                if data["Target Address"]:
+                    new_dict["Target Address"] = "__ ".join(sorted(data["Target Address"]))
+                if data["Initiator Addresses"]:
+                    new_dict["Initiator Addresses"] = "__ ".join(sorted(data["Initiator Addresses"]))
+            
+            merged.append(new_dict)
+        return merged
+
+
+    except Exception as e:
+        print(f"[ERROR] extract_host_info failed: {e}")
+        return []
+
+    except ValueError as e:
+        print(f"Error: {e}")
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+    except sqlite3.Error as e:
+        print(f"SQLite error: {e}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
 def write_slot_info_sheet(writer, slot_data):
     wb = writer.book
@@ -1107,6 +1392,7 @@ if __name__ == "__main__":
     if os.path.isfile(uilog_path):
         uilog = log_extract(uilog_path)
 
+    host_data = extract_host_info()
     # Extract General Device Info
     sys_info = extract_sysinfo()
     
@@ -1159,6 +1445,9 @@ if __name__ == "__main__":
         if device_info:
             df_devinfo = pd.DataFrame(device_info)
             df_devinfo.to_excel(writer, sheet_name="Device Info", index=False)
+        if host_data:
+            df_host = pd.DataFrame(host_data)
+            df_host.to_excel(writer, sheet_name="Host Info", index=False)
         if sys_info:
             df_host = pd.DataFrame(sys_info)
             df_host.to_excel(writer, sheet_name="General System Info", index=False)
